@@ -29,7 +29,7 @@ Fortinet Developer Network (FNDN) as `1519-fortidast`.
 
 ## Requirements
 
-- FortiSOAR 7.x / 8.x
+- FortiSOAR 7.x / 8.x on a Python 3.10+ appliance (the connector uses pydantic v2)
 - FortiDAST with REST API access
 - A FortiDAST API key:
   - **basic** keys may only call the read (query) operations;
@@ -109,10 +109,19 @@ the connector surfaces verbatim.
 
 ```bash
 python3 -m pytest tests/ -q
+ruff format . && ruff check .
 ```
 
 Offline only: the transport is faked, so the tests cannot catch a FortiDAST
 API change. Verify against a live FortiDAST before release.
+
+The API surface is typed end to end: `lib/fortidast/models.py` holds the
+pydantic request/response models (validated against the FNDN OpenAPI spec's
+shapes, lenient about the API's documented sloppiness -- nulls, lowercase
+timestamps, unknown keys), the client returns model instances, and operation
+parameters are validated through pydantic input models before any call is
+made. A response that drifts from the documented shape fails loudly at the
+client boundary instead of surfacing as a broken playbook downstream.
 
 ## Release
 

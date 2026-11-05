@@ -53,9 +53,15 @@ jobs:
             exit 1
           fi
 
+      - name: Ruff lint + format check
+        run: |
+          python3 -m pip install ruff
+          ruff format --check .
+          ruff check .
+
       - name: Offline tests
         run: |
-          python3 -m pip install pytest requests
+          python3 -m pip install pytest requests pydantic
           python3 -m pytest tests/ -q
 
       - name: Build bundle

@@ -19,3 +19,8 @@ First release.
   re-runs refresh instead of duplicating and a rescan updates its alert.
 - Health check probes authentication with a parameterless allassets call
   (400 means the key is valid, 401/403 carries the key error).
+- Pydantic v2 throughout: typed request/response models per endpoint,
+  operation params validated through input models (empty-string optionals
+  treated as unset), and response-shape drift raised as a loud
+  ConnectorError at the client boundary. Sources are ruff-format clean and
+  the release workflow lints them.

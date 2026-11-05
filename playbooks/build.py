@@ -15,11 +15,12 @@ Usage:  python playbooks/build.py [--fsrpb /path/to/fsrpb]
 
 import argparse
 import json
-import pathlib
 import os
+import pathlib
 import re
 import subprocess
 import sys
+from typing import Any
 
 HERE = pathlib.Path(__file__).resolve().parent
 YAML_IN = HERE / "playbooks.yaml"
@@ -28,7 +29,7 @@ JSON_OUT = HERE / "playbooks.json"
 CONNECTOR = "fortinet-fortidast"
 
 
-def _freeze_timestamps(doc):
+def _freeze_timestamps(doc: dict[str, Any]) -> dict[str, Any]:
     """Pin every ``lastModifyDate`` so a rebuild is byte-identical.
 
     The compiler stamps each workflow with the wall-clock time of the build, so
@@ -41,7 +42,7 @@ def _freeze_timestamps(doc):
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     stamp = int(epoch) if epoch and epoch.isdigit() else int(YAML_IN.stat().st_mtime)
 
-    def walk(node):
+    def walk(node: Any) -> None:
         if isinstance(node, dict):
             if "lastModifyDate" in node:
                 node["lastModifyDate"] = stamp
@@ -55,7 +56,7 @@ def _freeze_timestamps(doc):
     return doc
 
 
-def _sync_collection_version(doc):
+def _sync_collection_version(doc: dict[str, Any]) -> dict[str, Any]:
     """Retag the sample collection with the version from ``info.json``.
 
     FortiSOAR deletes a connector's sample collection on upgrade and re-imports
@@ -69,17 +70,18 @@ def _sync_collection_version(doc):
         return doc
     for collection in doc.get("data", []):
         name = collection.get("name") or ""
-        collection["name"] = re.sub(r"\d+\.\d+\.\d+$", version, name) if re.search(
-            r"\d+\.\d+\.\d+$", name) else name
+        collection["name"] = (
+            re.sub(r"\d+\.\d+\.\d+$", version, name) if re.search(r"\d+\.\d+\.\d+$", name) else name
+        )
     return doc
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--fsrpb", default="fsrpb", help="path to the fsrpb executable")
     args = ap.parse_args()
 
-    def _compile(lax):
+    def _compile(lax: bool) -> subprocess.CompletedProcess[str]:
         cmd = [args.fsrpb, "compile", str(YAML_IN), "-o", str(JSON_OUT)]
         if lax:
             cmd.insert(3, "--lax")
