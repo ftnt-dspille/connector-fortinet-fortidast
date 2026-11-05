@@ -1,0 +1,76 @@
+name: release
+
+# Tag `v1.2.0` builds the bundle for info.json version 1.2.0 and attaches it to
+# a GitHub release. The tag is the trigger, but info.json stays the source of
+# truth for the version - the checks below refuse a tag that disagrees with it.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match info.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          info=$(python3 -c "import json;print(json.load(open('info.json'))['version'])")
+          if [ "$tag" != "$info" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match info.json version $info"
+            exit 1
+          fi
+          echo "version=$info" >> "$GITHUB_ENV"
+
+      - name: Install fsrpb compiler
+        # YAML is the source of truth for humans; JSON is build output. CI
+        # installs the compiler and recompiles here so a contributor only ever
+        # has to edit playbooks.yaml - a missed local rebuild won't ship a
+        # stale collection name or stale step wiring.
+        # Pinned to an immutable commit so a compromised branch of the compiler
+        # can't rewrite playbooks on release. Bump intentionally.
+        run: pip install -e "git+https://github.com/ftnt-dspille/fsr-playbook-framework.git@797c381cf1ebf377d754182b5be9ea84c1ff8824#egg=fsrpb"
+        # Editable on purpose: the fsrpb console shim bootstraps <install-dir>/tooling
+        # onto sys.path, and the wheel does not ship tooling/ -- only a checkout
+        # install has it. A non-editable install dies with "No module named cli".
+
+      - name: Recompile playbooks
+        run: python playbooks/build.py
+
+      - name: Recompiled playbooks must match the committed build
+        run: git diff --exit-code -- playbooks/playbooks.json
+
+      - name: Sources must be latin-1 clean
+        # FortiSOAR loads connector sources latin-1; an en/em dash breaks the
+        # import at runtime, not at build time.
+        run: |
+          if grep -rIl $'\xe2\x80\x93\|\xe2\x80\x94' --exclude-dir=.git .; then
+            echo "::error::en/em dash found in the files above; FortiSOAR loads sources latin-1"
+            exit 1
+          fi
+
+      - name: Offline tests
+        run: |
+          python3 -m pip install pytest requests
+          python3 -m pytest tests/ -q
+
+      - name: Build bundle
+        # The .tgz name carries exactly one dot: version dots become underscores,
+        # or FortiSOAR's filename parse misroutes the import.
+        run: |
+          mkdir -p dist
+          NAME="fortinet-fortidast-$(echo "$version" | tr '.' '_').tgz"
+          tar -czf "dist/$NAME" \
+            info.json connector.py operations.py requirements.txt \
+            release_notes.md images lib playbooks/playbooks.json
+          echo "bundle=dist/$NAME" >> "$GITHUB_ENV"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/fortinet-fortidast-*.tgz
+          generate_release_notes: true

@@ -1,0 +1,813 @@
+{
+  "name": "fortinet-fortidast",
+  "version": "1.0.0",
+  "label": "Fortinet FortiDAST",
+  "description": "Integrates with Fortinet FortiDAST (Dynamic Application Security Testing) to start and stop scans, manage scan schedules and scan configuration, and pull assets, scan status, scan results, summaries, recon data and JSON/XML reports into FortiSOAR. Ships a data ingestion chain that creates an alert per completed scan.",
+  "publisher": "Fortinet",
+  "contributor": "",
+  "cs_approved": false,
+  "cs_compatible": true,
+  "tags": [
+    "Fortinet",
+    "FortiDAST",
+    "DAST",
+    "Vulnerability Management"
+  ],
+  "category": "Vulnerability Management",
+  "help_online": "",
+  "icon_small_name": "small_icon.png",
+  "icon_large_name": "large_icon.png",
+  "ingestion_supported": true,
+  "configuration": {
+    "fields": [
+      {
+        "title": "Base URL",
+        "name": "base_url",
+        "description": "FortiDAST REST API base URL, including the /api suffix (for example https://fortidast.forticloud.com/api). Override for on-premises deployments.",
+        "type": "text",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "value": "https://fortidast.forticloud.com/api",
+        "tooltip": "The API paths (/v1.0/cmdb/..., /v1.0/query/...) are appended to this base.",
+        "isOnChange": false
+      },
+      {
+        "title": "API Key",
+        "name": "api_key",
+        "description": "FortiDAST API key, generated in the FortiDAST console (Vulnerability Assessment > REST API). Read keys can call the query operations; privileged keys can also start/stop scans and change configuration.",
+        "type": "password",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "tooltip": "Sent as the X-API-Key request header. The key is shown only once at generation time.",
+        "isOnChange": false
+      },
+      {
+        "title": "Verify SSL",
+        "name": "verify_ssl",
+        "description": "Verify the FortiDAST server TLS certificate. Disable only for self-signed or lab deployments.",
+        "type": "boolean",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "value": true,
+        "tooltip": "FortiDAST deployments with a self-signed certificate need this off.",
+        "isOnChange": false
+      }
+    ]
+  },
+  "operations": [
+    {
+      "operation": "start_scan",
+      "title": "Start Scan",
+      "description": "Start a vulnerability scan for an asset. Requires a privileged API key.",
+      "annotation": "start_scan",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to scan, exactly as registered in FortiDAST (for example http://testphp.com)."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset (Get Assets returns it)."
+        },
+        {
+          "title": "Scan Type",
+          "name": "scan_type",
+          "type": "select",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "Quick Scan",
+            "Full Scan"
+          ],
+          "value": "Full Scan",
+          "tooltip": "Quick Scan maps to scan_type=0, Full Scan to scan_type=1."
+        }
+      ],
+      "output_schema": {
+        "status": "",
+        "complete": ""
+      }
+    },
+    {
+      "operation": "stop_scan",
+      "title": "Stop Scan",
+      "description": "Stop a running scan for an asset. Requires a privileged API key.",
+      "annotation": "stop_scan",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset whose scan to stop."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {
+        "status": ""
+      }
+    },
+    {
+      "operation": "get_assets",
+      "title": "Get Assets",
+      "description": "List all assets (scan URLs) registered in FortiDAST for a user.",
+      "annotation": "get_assets",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "User",
+          "name": "user",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The FortiDAST username whose assets to list."
+        }
+      ],
+      "output_schema": [
+        {
+          "asset_name": "",
+          "uuid": ""
+        }
+      ]
+    },
+    {
+      "operation": "get_scan_status",
+      "title": "Get Scan Status",
+      "description": "Return the status of scans for an asset: scan state, start times, owner and threat level.",
+      "annotation": "get_scan_status",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": [
+        {
+          "asset_name": "",
+          "uuid": "",
+          "created_at": "",
+          "scan_owner": "",
+          "scan_started_at": "",
+          "scan_at": "",
+          "scan_status": "",
+          "threat_level": ""
+        }
+      ]
+    },
+    {
+      "operation": "get_auth_status",
+      "title": "Get Auth Status",
+      "description": "Return the per-asset scan status with authentication state.",
+      "annotation": "get_auth_status",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": [
+        {
+          "asset_name": "",
+          "uuid": "",
+          "scan_status": ""
+        }
+      ]
+    },
+    {
+      "operation": "get_scan_results",
+      "title": "Get Scan Results",
+      "description": "Return the vulnerabilities found for an asset's scan, with severity, CVSS, CWE, FortiGuard id, payload, impact and remediation.",
+      "annotation": "get_scan_results",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {
+        "vulnhash_url": "",
+        "results": [
+          {
+            "uuid": "",
+            "url": "",
+            "vulnerabilitytype": "",
+            "severity": "",
+            "scanstarttime": "",
+            "scanendtime": "",
+            "cvssscore": "",
+            "cvssvector": "",
+            "cweid": "",
+            "fortiguard_id": "",
+            "payload": [],
+            "scanstatus": "",
+            "vulnerabilitydescription": "",
+            "impact": "",
+            "remediation": ""
+          }
+        ]
+      }
+    },
+    {
+      "operation": "get_scan_summary",
+      "title": "Get Scan Summary",
+      "description": "Return per-vulnerability-type severity counts for an asset's scan.",
+      "annotation": "get_scan_summary",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": [
+        {
+          "vulnerabilitytype": "",
+          "severitycount": {},
+          "categortyenabled": ""
+        }
+      ]
+    },
+    {
+      "operation": "get_uri_scan_summary",
+      "title": "Get URI Scan Summary",
+      "description": "Return per-URI scan timing and severity counts. Summary Type URI reads /query/uriscansummary; API reads /query/uriscansummary/apiresult for REST API scan results.",
+      "annotation": "get_uri_scan_summary",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        },
+        {
+          "title": "Summary Type",
+          "name": "summary_type",
+          "type": "select",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "uri",
+            "api"
+          ],
+          "value": "uri",
+          "tooltip": "URI is the per-URL scan summary; API is the REST API scan summary."
+        }
+      ],
+      "output_schema": [
+        {
+          "uri": "",
+          "severitycount": [],
+          "starttime": "",
+          "endtime": "",
+          "fuzztype": [],
+          "fuzzererror": []
+        }
+      ]
+    },
+    {
+      "operation": "get_recon_results",
+      "title": "Get Recon Results",
+      "description": "Return the reconnaissance data FortiDAST collected for an asset: technologies, frameworks and server fingerprinting.",
+      "annotation": "get_recon_results",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {
+        "status": "",
+        "recon_data": {}
+      }
+    },
+    {
+      "operation": "get_json_report",
+      "title": "Get JSON Report",
+      "description": "Return the full JSON scan report for an asset, organized by vulnerability type, CVSS score and affected URL.",
+      "annotation": "get_json_report",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {}
+    },
+    {
+      "operation": "get_xml_report",
+      "title": "Get XML Report",
+      "description": "Return the raw XML scan report for an asset as a string (suitable for saving as a FortiSOAR attachment).",
+      "annotation": "get_xml_report",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {
+        "scanresult": ""
+      }
+    },
+    {
+      "operation": "get_scan_schedule",
+      "title": "Get Scan Schedule",
+      "description": "Return the scheduled scan configuration for an asset.",
+      "annotation": "get_scan_schedule",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": {
+        "enabled": "",
+        "scandate": "",
+        "scantime": "",
+        "frequency": "",
+        "interval": ""
+      }
+    },
+    {
+      "operation": "set_scan_schedule",
+      "title": "Set Scan Schedule",
+      "description": "Create or update the scheduled scan for an asset. Requires a privileged API key.",
+      "annotation": "set_scan_schedule",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to schedule."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        },
+        {
+          "title": "Enable",
+          "name": "enable",
+          "type": "boolean",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "value": true,
+          "tooltip": "Enable or disable the scheduled scan."
+        },
+        {
+          "title": "Scan Date",
+          "name": "scandate",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Start date in YYYY-MM-DD format."
+        },
+        {
+          "title": "Scan Time",
+          "name": "scantime",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Start time in HH:MM:SS format."
+        },
+        {
+          "title": "Frequency",
+          "name": "frequency",
+          "type": "select",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "O",
+            "W",
+            "M"
+          ],
+          "tooltip": "O=once, W=weekly, M=monthly."
+        },
+        {
+          "title": "Interval",
+          "name": "interval",
+          "type": "integer",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "For weekly frequency, 1-7 (Sunday-Saturday)."
+        }
+      ],
+      "output_schema": {
+        "status": ""
+      }
+    },
+    {
+      "operation": "update_scan_config",
+      "title": "Update Scan Config",
+      "description": "Update one scan configuration tab for an asset (authentication, coverage, exploit engine, forced browsing, HTTP or WAF). Requires a privileged API key. Pass the tab's fields as JSON in Config; consult the FortiDAST OpenAPI spec for each tab's fields.",
+      "annotation": "update_scan_config",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset whose scan configuration to update."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        },
+        {
+          "title": "Section",
+          "name": "section",
+          "type": "select",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "authentication",
+            "coverage",
+            "exploit_engine",
+            "forced_browsing",
+            "http",
+            "waf"
+          ],
+          "tooltip": "Which scan configuration tab to update."
+        },
+        {
+          "title": "Config",
+          "name": "config",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "JSON object with the tab's fields, for example {\"authtype\": \"basic\", \"username\": \"u\", \"password\": \"p\"}."
+        }
+      ],
+      "output_schema": {
+        "status": ""
+      }
+    },
+    {
+      "operation": "get_owasp_categories",
+      "title": "Get OWASP Categories",
+      "description": "Return the OWASP category list FortiDAST scans for.",
+      "annotation": "get_owasp_categories",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to query."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        }
+      ],
+      "output_schema": []
+    },
+    {
+      "operation": "get_ui_link",
+      "title": "Get UI Link",
+      "description": "Generate a FortiDAST console URL fragment for an asset's scan results or configuration, for use in alert descriptions and dashboard links.",
+      "annotation": "get_ui_link",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "Asset URL",
+          "name": "url",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The asset to link to."
+        },
+        {
+          "title": "Asset UUID",
+          "name": "uuid",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The UUID FortiDAST assigned to the asset."
+        },
+        {
+          "title": "Link Type",
+          "name": "link_type",
+          "type": "select",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "scan_result",
+            "scan_config",
+            "cvss_severity",
+            "owasp_category",
+            "owasp_severity"
+          ],
+          "tooltip": "Which console view to link to. cvss_severity and the OWASP links take optional Severity and Category filters."
+        },
+        {
+          "title": "Severity",
+          "name": "severity",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Severity filter for cvss_severity, owasp_category and owasp_severity links."
+        },
+        {
+          "title": "Category",
+          "name": "category",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "OWASP category filter for the owasp_severity link."
+        }
+      ],
+      "output_schema": {
+        "url": ""
+      }
+    },
+    {
+      "operation": "get_completed_scans",
+      "title": "Get Completed Scans",
+      "description": "List every asset of a FortiDAST user and return the assets whose latest scan is complete, each with a severity rollup of its findings. This is the data ingestion source operation: one record per asset scan.",
+      "annotation": "get_completed_scans",
+      "category": "investigation",
+      "visible": true,
+      "enabled": true,
+      "parameters": [
+        {
+          "title": "User",
+          "name": "user",
+          "type": "text",
+          "required": true,
+          "editable": true,
+          "visible": true,
+          "tooltip": "The FortiDAST username whose assets to enumerate."
+        },
+        {
+          "title": "Include Findings",
+          "name": "include_findings",
+          "type": "select",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "options": [
+            "true",
+            "false"
+          ],
+          "value": "true",
+          "tooltip": "Also fetch the scan's findings (one extra API call per completed scan)."
+        },
+        {
+          "title": "Maximum Scans",
+          "name": "max_scans",
+          "type": "integer",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "value": 100,
+          "tooltip": "Cap on completed scans returned per run, oldest first."
+        }
+      ],
+      "output_schema": [
+        {
+          "asset_name": "",
+          "uuid": "",
+          "scan_owner": "",
+          "scan_started_at": "",
+          "scan_at": "",
+          "detected_ts": "",
+          "scan_status": "",
+          "threat_level": "",
+          "result_count": "",
+          "max_severity": "",
+          "summary_text": "",
+          "vulnhash_url": "",
+          "findings": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,540 @@
+{
+  "type": "workflow_collections",
+  "macros": [],
+  "exported_tags": [
+    "fortinet-fortidast",
+    "Fortinet",
+    "dataingestion",
+    "fetch",
+    "create",
+    "ingest"
+  ],
+  "data": [
+    {
+      "@type": "WorkflowCollection",
+      "name": "Sample - Fortinet FortiDAST - 1.0.0",
+      "description": "Sample playbooks for the \"Fortinet FortiDAST\" connector. If you are planning to use the sample playbooks in your environment, ensure that you clone those playbooks and move them to a different collection, since the sample playbook collection gets deleted during connector upgrade and delete.",
+      "visible": true,
+      "image": null,
+      "uuid": "fc74c089-bd0f-5400-90a8-637092179714",
+      "recordTags": [
+        "fortinet-fortidast",
+        "Fortinet",
+        "dataingestion"
+      ],
+      "workflows": [
+        {
+          "@type": "Workflow",
+          "name": "> FortiDAST > Fetch",
+          "aliasName": null,
+          "tag": "",
+          "recordTags": [
+            "fortinet-fortidast",
+            "fetch",
+            "dataingestion"
+          ],
+          "description": "Enumerates the FortiDAST assets of a user and returns the ones whose latest scan is complete, each with a severity rollup of its findings (Get Completed Scans). The Data Ingestion Wizard reads this playbook's output shape for its Data Mapping preview.",
+          "isActive": true,
+          "debug": false,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": 0,
+          "parameters": [
+            "username",
+            "max_scans",
+            "include_findings"
+          ],
+          "synchronous": false,
+          "lastModifyDate": 1793910525,
+          "collection": "/api/3/workflow_collections/fc74c089-bd0f-5400-90a8-637092179714",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/344bcdf8-f461-57ea-9bed-de832f1c9cf4",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "inputVariables": [
+                  {
+                    "name": "username"
+                  },
+                  {
+                    "name": "max_scans"
+                  },
+                  {
+                    "name": "include_findings"
+                  }
+                ],
+                "step_variables": {
+                  "input": {
+                    "params": []
+                  },
+                  "_configuration_schema": "[{\"title\": \"FortiDAST User\", \"required\": true, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"username\", \"value\": \"admin\", \"tooltip\": \"The FortiDAST username whose assets the ingestion enumerates (Get Assets lists the assets of one user).\"}, {\"title\": \"Maximum Scans Per Run\", \"required\": false, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"max_scans\", \"value\": 100, \"tooltip\": \"Cap on completed scans one run returns, oldest first. Each completed scan costs one extra API call when Include Findings is on; raise the cap or shorten the schedule rather than let it bind.\"}, {\"title\": \"Include Findings\", \"required\": false, \"editable\": true, \"visible\": true, \"type\": \"select\", \"name\": \"include_findings\", \"options\": [\"true\", \"false\"], \"value\": \"true\", \"tooltip\": \"Also fetch each completed scan's findings (severity rollup, summary text, the findings themselves). Turning this off lightens every run but the alerts then carry no findings.\"}]"
+                }
+              },
+              "status": null,
+              "top": "120",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/b348f017-9a94-471f-87f8-ce88b6a7ad62",
+              "group": null,
+              "uuid": "344bcdf8-f461-57ea-9bed-de832f1c9cf4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Configuration",
+              "description": null,
+              "arguments": {
+                "username": "{{ vars.input.params.username | default('admin') }}",
+                "max_scans": "{{ vars.input.params.max_scans | default(100) }}",
+                "include_findings": "{{ vars.input.params.include_findings | default('true') }}"
+              },
+              "status": null,
+              "top": "250",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "72bfd84f-1387-51f0-8fa6-c131c1895e16"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Fetch",
+              "description": null,
+              "arguments": {
+                "connector": "fortinet-fortidast",
+                "operation": "get_completed_scans",
+                "operationTitle": "Get Completed Scans",
+                "config": "",
+                "params": {
+                  "user": "{{vars.username}}",
+                  "max_scans": "{{vars.max_scans}}",
+                  "include_findings": "{{vars.include_findings}}"
+                },
+                "mock_result": "{\n  \"data\": [\n    {\n      \"asset_name\": \"http://example.com\",\n      \"uuid\": \"e0000000-0000-4000-8000-000000000000\",\n      \"scan_owner\": \"owner@example.com\",\n      \"scan_status\": \"Scan Complete\",\n      \"scan_started_at\": \"2026-11-01T10:00:00.000000Z\",\n      \"scan_at\": \"2026-11-01T10:05:00.000000Z\",\n      \"detected_ts\": 1793599500,\n      \"threat_level\": 42,\n      \"result_count\": 1,\n      \"max_severity\": \"High\",\n      \"summary_text\": \"FortiDAST scan of http://example.com completed. Findings by severity: High: 1.\",\n      \"vulnhash_url\": \"https://fortidast.forticloud.com/sso?scanresult/sample\",\n      \"findings\": [\n        {\n          \"vulnerabilitytype\": \"A1 - Injection\",\n          \"severity\": \"High\",\n          \"cvssscore\": 9.8,\n          \"cweid\": 89,\n          \"vulnerabilitydescription\": \"SQL injection in the search parameter.\",\n          \"remediation\": \"Use parameterized queries.\"\n        }\n      ]\n    }\n  ]\n}",
+                "version": "1.0.0",
+                "name": "Fortinet FortiDAST",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "380",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "38035ef7-8b48-5f76-92e3-0bd36970376b"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Save Result",
+              "description": null,
+              "arguments": {
+                "data": "{{vars.steps.Fetch.data}}"
+              },
+              "status": null,
+              "top": "510",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "b2207581-8323-531b-985d-42212a1261c0"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> Configuration",
+              "targetStep": "/api/3/workflow_steps/72bfd84f-1387-51f0-8fa6-c131c1895e16",
+              "sourceStep": "/api/3/workflow_steps/344bcdf8-f461-57ea-9bed-de832f1c9cf4",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "5db6e853-9e35-5d46-a777-ebfd0d83216f"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Configuration -> Fetch",
+              "targetStep": "/api/3/workflow_steps/38035ef7-8b48-5f76-92e3-0bd36970376b",
+              "sourceStep": "/api/3/workflow_steps/72bfd84f-1387-51f0-8fa6-c131c1895e16",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f7145552-20cd-5e13-b3a0-facddbfc3f3a"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Fetch -> Save Result",
+              "targetStep": "/api/3/workflow_steps/b2207581-8323-531b-985d-42212a1261c0",
+              "sourceStep": "/api/3/workflow_steps/38035ef7-8b48-5f76-92e3-0bd36970376b",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "daa9d98b-e24a-542b-8aa9-3066b8538ba3"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Configuration",
+              "description": "Wizard-editable values. The defaults here are what a run uses when the\ningestion configuration delivered no inputs (manual run, or a\nconfiguration saved before these fields existed).\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "250",
+              "left": "540",
+              "height": "160",
+              "width": "440",
+              "uuid": "f3647483-856b-57bb-a34e-cb1f6f8273b2",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Save Result",
+              "description": "The Fetch -> Ingest contract. Ingest reads this off the workflow\nreference step (\"List Completed Scans\") as\nvars.steps.List_Completed_Scans.data.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "510",
+              "left": "540",
+              "height": "138",
+              "width": "440",
+              "uuid": "95fb0821-128f-5cbd-b7c2-72b9f6ea0361",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/9e8d41e4-8ada-4a2c-bd02-07f62c6d0a00",
+          "playbookOrigin": null,
+          "isEditable": true,
+          "uuid": "a687d779-f51b-5aa1-bd96-bb828a9e37ed",
+          "owners": [],
+          "isPrivate": false
+        },
+        {
+          "@type": "Workflow",
+          "name": "FortiDAST > Ingest",
+          "aliasName": null,
+          "tag": "",
+          "recordTags": [
+            "fortinet-fortidast",
+            "ingest",
+            "dataingestion",
+            "create"
+          ],
+          "description": "Orchestrator: calls Fetch, then either returns a sample record for the wizard's Data Mapping preview (env_setup mode) or creates one alert per completed asset scan, upserted on the asset uuid so re-runs refresh instead of duplicating.",
+          "isActive": true,
+          "debug": false,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": 0,
+          "parameters": [
+            "username",
+            "max_scans",
+            "include_findings"
+          ],
+          "synchronous": false,
+          "lastModifyDate": 1793910525,
+          "collection": "/api/3/workflow_collections/fc74c089-bd0f-5400-90a8-637092179714",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/f1c181a9-18ca-593d-b122-ab7c710c0bb9",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "inputVariables": [
+                  {
+                    "name": "username"
+                  },
+                  {
+                    "name": "max_scans"
+                  },
+                  {
+                    "name": "include_findings"
+                  }
+                ],
+                "title": "FortiDAST > Ingest",
+                "resources": [
+                  "alerts"
+                ],
+                "route": "bc26875c-20b8-5b3d-a667-51acf008fba2",
+                "step_variables": {
+                  "input": {
+                    "params": {
+                      "username": "{{vars.request.data[\"username\"]}}",
+                      "max_scans": "{{vars.request.data[\"max_scans\"]}}",
+                      "include_findings": "{{vars.request.data[\"include_findings\"]}}"
+                    },
+                    "records": "{{vars.input.records}}"
+                  }
+                },
+                "triggerOnSource": true,
+                "triggerOnReplicate": false,
+                "noRecordExecution": true,
+                "singleRecordExecution": false,
+                "__triggerLimit": true,
+                "executeButtonText": "Execute",
+                "showToasterMessage": {
+                  "visible": false,
+                  "messageVisible": true
+                },
+                "displayConditions": {
+                  "alerts": {
+                    "sort": [],
+                    "limit": 30,
+                    "logic": "AND",
+                    "filters": []
+                  }
+                }
+              },
+              "status": null,
+              "top": "120",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
+              "group": null,
+              "uuid": "f1c181a9-18ca-593d-b122-ab7c710c0bb9"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "List Completed Scans",
+              "description": null,
+              "arguments": {
+                "apply_async": false,
+                "pass_parent_env": false,
+                "pass_input_record": false,
+                "arguments": {
+                  "username": "{{ vars.input.params.username | default('admin') }}",
+                  "max_scans": "{{ vars.input.params.max_scans | default(100) }}",
+                  "include_findings": "{{ vars.input.params.include_findings | default('true') }}"
+                },
+                "workflowReference": "/api/3/workflows/a687d779-f51b-5aa1-bd96-bb828a9e37ed"
+              },
+              "status": null,
+              "top": "250",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/74932bdc-b8b6-4d24-88c4-1a4dfbc524f3",
+              "group": null,
+              "uuid": "7c7c9a12-5850-5275-aff7-f12eef74f0d2"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Mapping Preview",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": "Mapping Preview",
+                    "condition": "{{ vars.request.env_setup | default(false) | bool }}",
+                    "step_iri": "/api/3/workflow_steps/2db60de8-9394-5f7d-852f-14c41d6c97ad",
+                    "step_name": "Return Sample"
+                  },
+                  {
+                    "option": "Ingest",
+                    "default": true,
+                    "step_iri": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
+                    "step_name": "Configuration"
+                  }
+                ]
+              },
+              "status": null,
+              "top": "380",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "3eb5cb01-ecfe-5c20-8407-bf39366bd16e"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Return Sample",
+              "description": null,
+              "arguments": {
+                "sample": "{% if vars.steps.List_Completed_Scans.data | default([]) | length > 0 %}\n  {{ vars.steps.List_Completed_Scans.data[0] }}\n{% else %}\n  {{ { 'asset_name': 'http://example.com', 'uuid': 'e0000000-0000-4000-8000-000000000000', 'scan_owner': 'owner@example.com', 'scan_status': 'Scan Complete', 'scan_started_at': '2026-11-01T10:00:00.000000Z', 'scan_at': '2026-11-01T10:05:00.000000Z', 'detected_ts': 1793599500, 'threat_level': 42, 'result_count': 2, 'max_severity': 'High', 'summary_text': 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.', 'vulnhash_url': 'https://fortidast.forticloud.com/sso?scanresult/sample', 'findings': [ { 'vulnerabilitytype': 'A1 - Injection', 'severity': 'High', 'cvssscore': 9.8, 'cweid': 89, 'vulnerabilitydescription': 'SQL injection in the search parameter.', 'remediation': 'Use parameterized queries.' }, { 'vulnerabilitytype': 'A5 - Misconfiguration', 'severity': 'Low', 'cvssscore': 3.1, 'cweid': 16, 'vulnerabilitydescription': 'Directory listing enabled.', 'remediation': 'Disable directory listing.' } ] } }}\n{% endif %}"
+              },
+              "status": null,
+              "top": "510",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "2db60de8-9394-5f7d-852f-14c41d6c97ad"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Configuration",
+              "description": null,
+              "arguments": {
+                "incident_source_data": "{{ vars.steps.List_Completed_Scans.data }}"
+              },
+              "status": null,
+              "top": "510",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "3c147c87-30e1-522f-af25-06daef7d6f10"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Record",
+              "description": null,
+              "arguments": {
+                "operation": "Overwrite",
+                "resource": {
+                  "name": "FortiDAST scan findings for {{ vars.item.asset_name }}",
+                  "source": "Fortinet FortiDAST",
+                  "sourceId": "{{ vars.item.uuid }}",
+                  "severity": "{{ \"Severity\" | picklist(vars.item.max_severity | default(\"Informational\")) }}",
+                  "alertDetectionDate": "{{ vars.item.detected_ts }}",
+                  "description": "{{ vars.item.summary_text | e }}{% if vars.item.vulnhash_url %}<br><br>Scan results: <a href=\"{{ vars.item.vulnhash_url | e }}\">Open in FortiDAST</a>{% endif %}",
+                  "sourcedata": "{{ vars.item | toJSON }}",
+                  "__replace": "true"
+                },
+                "collection": "/api/3/upsert/alerts",
+                "for_each": {
+                  "item": "{{ vars.incident_source_data }}",
+                  "condition": "",
+                  "__bulk": true,
+                  "batch_size": 100
+                }
+              },
+              "status": null,
+              "top": "640",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
+              "group": null,
+              "uuid": "e111ffe1-ef14-56dc-a14e-80928bb8e332"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> List Completed Scans",
+              "targetStep": "/api/3/workflow_steps/7c7c9a12-5850-5275-aff7-f12eef74f0d2",
+              "sourceStep": "/api/3/workflow_steps/f1c181a9-18ca-593d-b122-ab7c710c0bb9",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "ccecc24a-acfd-5e85-a2d7-b15f69cd119b"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "List Completed Scans -> Mapping Preview",
+              "targetStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
+              "sourceStep": "/api/3/workflow_steps/7c7c9a12-5850-5275-aff7-f12eef74f0d2",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "674fb259-48ec-569a-a94f-6f3ddb648f85"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Mapping Preview -> Return Sample",
+              "targetStep": "/api/3/workflow_steps/2db60de8-9394-5f7d-852f-14c41d6c97ad",
+              "sourceStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
+              "label": "Mapping Preview",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "025ff060-0d6e-5d46-96c3-5c6356d69295"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Mapping Preview -> Configuration",
+              "targetStep": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
+              "sourceStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
+              "label": "Ingest",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "9c29858f-34af-5c60-9994-b699a0c6c9f3"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Configuration -> Create Record",
+              "targetStep": "/api/3/workflow_steps/e111ffe1-ef14-56dc-a14e-80928bb8e332",
+              "sourceStep": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "822b171c-708b-5a6a-aa59-696aec6f763e"
+            }
+          ],
+          "groups": [
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Mapping Preview",
+              "description": "The Data Ingestion Wizard runs the Ingest playbook with\nvars.request.env_setup == true while the analyst designs the field\nmapping in the UI. In that mode the first fetched record is returned\nso the wizard can render the Data Mapping preview; no alerts are\nwritten. false (or missing) is the real ingestion path.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "380",
+              "left": "880",
+              "height": "226",
+              "width": "440",
+              "uuid": "9552d5fe-1940-55e1-b407-2b102288ac5d",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Return Sample",
+              "description": "The sample for the wizard's Data Mapping preview: the first completed\nscan of the run, whose keys are the fields Create Record maps. Falls\nback to a representative record when the run found none, so the\npreview still renders.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "626",
+              "left": "880",
+              "height": "204",
+              "width": "440",
+              "uuid": "1df36d54-153d-57e9-960e-0f1faa38672f",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Configuration",
+              "description": "The values the alerts take from the connector's output: the run's\ncompleted scans. Severity comes from the per-scan rollup; a scan with\nno findings ingests as Informational.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "850",
+              "left": "880",
+              "height": "160",
+              "width": "440",
+              "uuid": "e32c6d41-9df0-5536-895b-004e37a981f0",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Create Record",
+              "description": "The step is named \"Create Record\" because the Data Ingestion Wizard's\nData Mapping page is shown only for a create playbook with a step of\nexactly that name, and it reads the target module off this step.\n\nis_upsert routes this at /api/3/upsert/alerts, keyed on sourceId (the\nasset uuid), so a re-run refreshes the asset's alert instead of\nduplicating it, and a rescan updates the same alert with the newest\nfindings.\n\nOnly the alert fields below are set. The raw scan row plus its\nfindings are kept as JSON in sourcedata (sourcedata must stay\n`| toJSON`: a bare {{ }} on a dict is stored as the literal string\n\"Array\").\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "1030",
+              "left": "880",
+              "height": "360",
+              "width": "440",
+              "uuid": "a159108c-c218-5975-8a63-516c38f4459b",
+              "recordTags": []
+            }
+          ],
+          "priority": "/api/3/picklists/9e8d41e4-8ada-4a2c-bd02-07f62c6d0a00",
+          "playbookOrigin": null,
+          "isEditable": true,
+          "uuid": "9fadc6cd-1c78-5d01-b73d-acb86ea2307c",
+          "owners": [],
+          "isPrivate": false
+        }
+      ]
+    }
+  ]
+}

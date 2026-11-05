@@ -1,0 +1,271 @@
+# FortiDAST connector sample playbooks.
+#
+# Build with `python playbooks/build.py`, never by hand (the compiled JSON
+# is stamped with the info.json version and frozen timestamps).
+#
+# Requires alongside this connector on the appliance:
+#   - fortinet-fortidast 1.0.0 with a working configuration (API key with at
+#     least basic access; the user whose assets the ingestion should read)
+
+collection: Sample - Fortinet FortiDAST - 1.0.0
+description: >-
+  Sample playbooks for the "Fortinet FortiDAST" connector. If you are
+  planning to use the sample playbooks in your environment, ensure that you
+  clone those playbooks and move them to a different collection, since the
+  sample playbook collection gets deleted during connector upgrade and
+  delete.
+visible: true
+tags:
+  - fortinet-fortidast
+  - Fortinet
+  - dataingestion
+exported_tags:
+  - fortinet-fortidast
+  - Fortinet
+  - dataingestion
+  - fetch
+  - create
+  - ingest
+
+playbooks:
+
+  # Data ingestion chain (Fetch / Ingest). -----------------------------------
+  #
+  # The Data Ingestion Wizard expects:
+  #   * tags: every playbook carries #dataingestion, Fetch carries #fetch,
+  #     Ingest carries #ingest and #create;
+  #   * Fetch's Start step carries configuration_schema, the form the wizard
+  #     shows;
+  #   * Fetch ends in a set_variable ("Save Result") publishing `data`. Ingest
+  #     reads it back off the workflow_reference step ("List Completed Scans")
+  #     as vars.steps.List_Completed_Scans.data.
+  #
+  # Dedup is by upsert, not by a watermark: the alert's sourceId is the asset
+  # uuid FortiDAST scans under, so re-running the ingestion updates the
+  # existing alert for an asset instead of duplicating it. A rescan of the
+  # same asset therefore refreshes its alert with the newest findings. There
+  # is no last-pull-time macro: FortiDAST has no "list scans since T"
+  # endpoint, so every run enumerates the assets anyway, and Maximum Scans
+  # bounds how much one run does.
+
+  - name: '> FortiDAST > Fetch'
+    description: >-
+      Enumerates the FortiDAST assets of a user and returns the ones whose
+      latest scan is complete, each with a severity rollup of its findings
+      (Get Completed Scans). The Data Ingestion Wizard reads this playbook's
+      output shape for its Data Mapping preview.
+    tags:
+    - fortinet-fortidast
+    - fetch
+    - dataingestion
+    is_active: true
+    parameters:
+    - username
+    - max_scans
+    - include_findings
+    steps:
+    - name: Start
+      type: start
+      inputVariables:
+      - {name: username}
+      - {name: max_scans}
+      - {name: include_findings}
+      configuration_schema:
+      - title: FortiDAST User
+        required: true
+        editable: true
+        visible: true
+        type: text
+        name: username
+        value: admin
+        tooltip: The FortiDAST username whose assets the ingestion enumerates (Get Assets lists the assets of one user).
+      - title: Maximum Scans Per Run
+        required: false
+        editable: true
+        visible: true
+        type: text
+        name: max_scans
+        value: 100
+        tooltip: Cap on completed scans one run returns, oldest first. Each completed scan costs one extra API call when Include Findings is on; raise the cap or shorten the schedule rather than let it bind.
+      - title: Include Findings
+        required: false
+        editable: true
+        visible: true
+        type: select
+        name: include_findings
+        options:
+        - 'true'
+        - 'false'
+        value: 'true'
+        tooltip: Also fetch each completed scan's findings (severity rollup, summary text, the findings themselves). Turning this off lightens every run but the alerts then carry no findings.
+      next: Configuration
+
+    - name: Configuration
+      type: set_variable
+      comment: |
+        Wizard-editable values. The defaults here are what a run uses when the
+        ingestion configuration delivered no inputs (manual run, or a
+        configuration saved before these fields existed).
+      vars:
+        username: "{{ vars.input.params.username | default('admin') }}"
+        max_scans: "{{ vars.input.params.max_scans | default(100) }}"
+        include_findings: "{{ vars.input.params.include_findings | default('true') }}"
+      next: Fetch
+
+    - name: Fetch
+      type: connector
+      connector: fortinet-fortidast
+      operation: get_completed_scans
+      operationTitle: Get Completed Scans
+      config: ''
+      params:
+        user: '{{vars.username}}'
+        max_scans: '{{vars.max_scans}}'
+        include_findings: '{{vars.include_findings}}'
+      mock_result:
+        data:
+        - asset_name: http://example.com
+          uuid: e0000000-0000-4000-8000-000000000000
+          scan_owner: owner@example.com
+          scan_status: Scan Complete
+          scan_started_at: '2026-11-01T10:00:00.000000Z'
+          scan_at: '2026-11-01T10:05:00.000000Z'
+          detected_ts: 1793599500
+          threat_level: 42
+          result_count: 1
+          max_severity: High
+          summary_text: 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1.'
+          vulnhash_url: https://fortidast.forticloud.com/sso?scanresult/sample
+          findings:
+          - vulnerabilitytype: A1 - Injection
+            severity: High
+            cvssscore: 9.8
+            cweid: 89
+            vulnerabilitydescription: SQL injection in the search parameter.
+            remediation: Use parameterized queries.
+      next: Save Result
+
+    - name: Save Result
+      type: set_variable
+      comment: |
+        The Fetch -> Ingest contract. Ingest reads this off the workflow
+        reference step ("List Completed Scans") as
+        vars.steps.List_Completed_Scans.data.
+      vars:
+        data: '{{vars.steps.Fetch.data}}'
+
+  - name: FortiDAST > Ingest
+    description: >-
+      Orchestrator: calls Fetch, then either returns a sample record for the
+      wizard's Data Mapping preview (env_setup mode) or creates one alert per
+      completed asset scan, upserted on the asset uuid so re-runs refresh
+      instead of duplicating.
+    tags:
+    - fortinet-fortidast
+    - ingest
+    - dataingestion
+    - create
+    is_active: true
+    parameters:
+    - username
+    - max_scans
+    - include_findings
+    steps:
+    - name: Start
+      type: start
+      module: alerts
+      button_label: 'FortiDAST > Ingest'
+      requires_record: false
+      inputVariables:
+      - {name: username}
+      - {name: max_scans}
+      - {name: include_findings}
+      next: List Completed Scans
+
+    - name: List Completed Scans
+      type: workflow_reference
+      target: '> FortiDAST > Fetch'
+      apply_async: false
+      pass_parent_env: false
+      pass_input_record: false
+      username: "{{ vars.input.params.username | default('admin') }}"
+      max_scans: "{{ vars.input.params.max_scans | default(100) }}"
+      include_findings: "{{ vars.input.params.include_findings | default('true') }}"
+      next: Mapping Preview
+
+    - name: Mapping Preview
+      type: decision
+      comment: |
+        The Data Ingestion Wizard runs the Ingest playbook with
+        vars.request.env_setup == true while the analyst designs the field
+        mapping in the UI. In that mode the first fetched record is returned
+        so the wizard can render the Data Mapping preview; no alerts are
+        written. false (or missing) is the real ingestion path.
+      conditions:
+      - display: Mapping Preview
+        when: '{{ vars.request.env_setup | default(false) | bool }}'
+        next: Return Sample
+      - display: Ingest
+        default: true
+        next: Configuration
+
+    - name: Return Sample
+      type: set_variable
+      comment: |
+        The sample for the wizard's Data Mapping preview: the first completed
+        scan of the run, whose keys are the fields Create Record maps. Falls
+        back to a representative record when the run found none, so the
+        preview still renders.
+      vars:
+        sample: >-
+          {% if vars.steps.List_Completed_Scans.data | default([]) | length > 0 %}
+            {{ vars.steps.List_Completed_Scans.data[0] }}
+          {% else %}
+            {{ { 'asset_name': 'http://example.com', 'uuid': 'e0000000-0000-4000-8000-000000000000', 'scan_owner': 'owner@example.com', 'scan_status': 'Scan Complete', 'scan_started_at': '2026-11-01T10:00:00.000000Z', 'scan_at': '2026-11-01T10:05:00.000000Z', 'detected_ts': 1793599500, 'threat_level': 42, 'result_count': 2, 'max_severity': 'High', 'summary_text': 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.', 'vulnhash_url': 'https://fortidast.forticloud.com/sso?scanresult/sample', 'findings': [ { 'vulnerabilitytype': 'A1 - Injection', 'severity': 'High', 'cvssscore': 9.8, 'cweid': 89, 'vulnerabilitydescription': 'SQL injection in the search parameter.', 'remediation': 'Use parameterized queries.' }, { 'vulnerabilitytype': 'A5 - Misconfiguration', 'severity': 'Low', 'cvssscore': 3.1, 'cweid': 16, 'vulnerabilitydescription': 'Directory listing enabled.', 'remediation': 'Disable directory listing.' } ] } }}
+          {% endif %}
+
+    - name: Configuration
+      type: set_variable
+      comment: |
+        The values the alerts take from the connector's output: the run's
+        completed scans. Severity comes from the per-scan rollup; a scan with
+        no findings ingests as Informational.
+      vars:
+        incident_source_data: '{{ vars.steps.List_Completed_Scans.data }}'
+      next: Create Record
+
+    - name: Create Record
+      type: create_record
+      module: alerts
+      operation: Overwrite
+      is_upsert: true
+      on_conflict: update_all
+      comment: |
+        The step is named "Create Record" because the Data Ingestion Wizard's
+        Data Mapping page is shown only for a create playbook with a step of
+        exactly that name, and it reads the target module off this step.
+
+        is_upsert routes this at /api/3/upsert/alerts, keyed on sourceId (the
+        asset uuid), so a re-run refreshes the asset's alert instead of
+        duplicating it, and a rescan updates the same alert with the newest
+        findings.
+
+        Only the alert fields below are set. The raw scan row plus its
+        findings are kept as JSON in sourcedata (sourcedata must stay
+        `| toJSON`: a bare {{ }} on a dict is stored as the literal string
+        "Array").
+      for_each:
+        item: '{{ vars.incident_source_data }}'
+        __bulk: true
+        batch_size: 100
+        condition: ''
+      fields:
+        name: "FortiDAST scan findings for {{ vars.item.asset_name }}"
+        source: Fortinet FortiDAST
+        sourceId: '{{ vars.item.uuid }}'
+        severity: '{{ "Severity" | picklist(vars.item.max_severity | default("Informational")) }}'
+        alertDetectionDate: '{{ vars.item.detected_ts }}'
+        # The summary is assembled from FortiDAST data and the description is
+        # rich text: escape it.
+        description: "{{ vars.item.summary_text | e }}{% if vars.item.vulnhash_url %}<br><br>Scan results: <a href=\"{{ vars.item.vulnhash_url | e }}\">Open in FortiDAST</a>{% endif %}"
+        sourcedata: '{{ vars.item | toJSON }}'
