@@ -113,7 +113,22 @@ ruff format . && ruff check .
 ```
 
 Offline only: the transport is faked, so the tests cannot catch a FortiDAST
-API change. Verify against a live FortiDAST before release.
+API change.
+
+### Live tests
+
+`tests/test_live.py` drives the real API (no FortiSOAR needed): copy
+`tests/.env.example` to `tests/.env`, paste your API key, then
+
+```bash
+pytest tests/test_live.py
+```
+
+Read-only by default (health check, assets, scan status/results, the
+`get_completed_scans` ingestion source); the start/stop scan test additionally
+requires `FORTIDAST_ALLOW_MUTATE=true` in `tests/.env`. `FORTIDAST_USER` names
+the FortiDAST user whose assets the tests enumerate (admin/administrator are
+tried when unset).
 
 The API surface is typed end to end: `lib/fortidast/models.py` holds the
 pydantic request/response models (validated against the FNDN OpenAPI spec's
