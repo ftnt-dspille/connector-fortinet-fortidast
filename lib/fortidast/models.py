@@ -85,6 +85,13 @@ def _truthy(value: Any) -> Any:
     return value
 
 
+def _epoch_or_none(value: Any) -> Any:
+    """An empty/blank watermark means "no filter", not a coercion error."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 def _none_to_list(value: Any) -> Any:
     """Tolerate a null where the spec promises a list."""
     return value if isinstance(value, list) else []
@@ -246,6 +253,11 @@ class CompletedScansParams(_Params):
     user: str
     include_findings: Annotated[bool, BeforeValidator(_truthy)] = True
     max_scans: int = Field(default=100, ge=1)
+    since_epoch: Annotated[int | None, BeforeValidator(_epoch_or_none)] = None
+    """Only scans whose completion timestamp is at or after this epoch second
+    are returned; the ingestion watermark writes it. Findings are fetched only
+    for the scans that survive the filter, so an old watermark bounds the API
+    load too."""
 
 
 # ---------------------------------------------------------------------------
@@ -415,14 +427,24 @@ class CompletedScan(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
 
     @classmethod
-    def from_row(
-        cls,
-        row: ScanStatusRow,
-        asset: Asset,
-        findings: list[Finding],
-        vulnhash_url: str,
-    ) -> CompletedScan:
-        """Build the record from a scanstatus row plus its fetched findings."""
+    def from_row(cls, row: ScanStatusRow, asset: Asset) -> CompletedScan:
+        """Build the scan shell from a scanstatus row; findings attach later.
+
+        The findings-dependent rollup fields (result_count, max_severity,
+        summary_text, vulnhash_url) stay at their defaults until
+        :meth:`attach_findings` runs, so get_completed_scans can filter and
+        cap on ``detected_ts`` BEFORE paying for any findings fetches.
+        """
+        # detected_ts is the LATEST timestamp the row carries: FortiDAST does
+        # not document whether scan_at is the completion time or a start-side
+        # stamp, and the ingestion watermark filters on this value -- a scan
+        # that completes late must not fall behind the watermark forever.
+        stamps = [
+            parse_epoch(row.scan_at),
+            parse_epoch(row.scan_started_at),
+            parse_epoch(row.created_at),
+        ]
+        known = [s for s in stamps if s is not None]
         scan = cls(
             asset_name=row.asset_name or asset.asset_name,
             uuid=row.uuid or asset.uuid,
@@ -431,18 +453,21 @@ class CompletedScan(BaseModel):
             scan_at=row.scan_at,
             scan_status=row.scan_status,
             threat_level=row.threat_level,
-            detected_ts=parse_epoch(row.scan_at or row.scan_started_at or row.created_at),
-            result_count=len(findings),
-            max_severity=max_severity(findings),
-            summary_text=_summary_text(asset.asset_name, findings),
-            vulnhash_url=vulnhash_url,
-            findings=findings,
+            detected_ts=max(known) if known else None,
         )
         # preserve any extra keys the row carried (kept for sourcedata)
         for key, value in row.model_dump(mode="json").items():
             if key not in cls.model_fields and key not in ("asset_name", "uuid"):
                 setattr(scan, key, value)
         return scan
+
+    def attach_findings(self, findings: list[Finding], vulnhash_url: str) -> None:
+        """Fill the findings-dependent rollup fields on a shell record."""
+        self.findings = findings
+        self.result_count = len(findings)
+        self.max_severity = max_severity(findings)
+        self.vulnhash_url = vulnhash_url
+        self.summary_text = _summary_text(self.asset_name, findings)
 
 
 def max_severity(findings: list[Finding]) -> str | None:

@@ -789,6 +789,15 @@
           "visible": true,
           "value": 100,
           "tooltip": "Cap on completed scans returned per run, oldest first."
+        },
+        {
+          "title": "Since (Epoch Seconds)",
+          "name": "since_epoch",
+          "type": "text",
+          "required": false,
+          "editable": true,
+          "visible": true,
+          "tooltip": "Watermark: only scans whose detected_ts is at or after this epoch second are returned, and findings are fetched only for those scans. Leave empty to return every completed scan."
         }
       ],
       "output_schema": [

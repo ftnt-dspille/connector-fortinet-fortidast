@@ -231,21 +231,44 @@ def test_models_parse_spec_example_shapes() -> None:
 def test_completed_scan_from_row_rolls_up() -> None:
     row = ScanStatusRow.model_validate(SLOPPY_STATUS_ROW)
     asset = Asset(asset_name="http://testphp.com", uuid="bb0ed915-d184-4d0f-b364-e5e18d44ea40")
+    # Phase 1: the shell carries no rollup until findings attach.
+    scan = CompletedScan.from_row(row, asset)
+    assert scan.max_severity is None and scan.result_count == 0
+    assert scan.summary_text == ""
+    assert scan.detected_ts is not None
+    # the raw row's extra keys survive for sourcedata
+    assert scan.model_dump()["scan_type"] == 0
+    # and the dump is JSON-serializable for FortiSOAR
+    json.dumps(scan.model_dump(mode="json"))
+
+    # Phase 2: attaching findings fills the rollup fields.
     findings = [
         Finding(severity="High", vulnerabilitytype="A1 - Injection"),
         Finding(severity="Low", vulnerabilitytype="A5 - Misconfiguration"),
         Finding(severity="None"),
     ]
-    scan = CompletedScan.from_row(row, asset, findings, "https://x/sso?scanresult/1")
+    scan.attach_findings(findings, "https://x/sso?scanresult/1")
     assert scan.max_severity == "High"
     assert scan.result_count == 3
-    assert scan.detected_ts is not None
     assert "High: 1" in scan.summary_text and "Low: 1" in scan.summary_text
     assert "Informational: 1" in scan.summary_text
-    # the raw row's extra keys survive for sourcedata
-    assert scan.model_dump()["scan_type"] == 0
-    # and the dump is JSON-serializable for FortiSOAR
-    json.dumps(scan.model_dump(mode="json"))
+    assert scan.vulnhash_url == "https://x/sso?scanresult/1"
+
+
+def test_completed_scan_detected_ts_is_max_of_timestamps() -> None:
+    """A scan completing late must not fall behind the watermark forever."""
+    row = ScanStatusRow.model_validate(
+        {
+            **SLOPPY_STATUS_ROW,
+            # created_at is 12 days EARLIER than scan_at/scan_started_at
+            "created_at": "2021-06-03t14:21:29.811522z",
+        }
+    )
+    asset = Asset(asset_name="http://testphp.com", uuid="bb0ed915-d184-4d0f-b364-e5e18d44ea40")
+    scan = CompletedScan.from_row(row, asset)
+    assert scan.detected_ts == parse_epoch("2021-06-15T02:56:51.279590Z")
+    assert scan.detected_ts is not None
+    assert scan.detected_ts > (parse_epoch("2021-06-03t14:21:29.811522z") or 0)
 
 
 def test_max_severity_and_counts() -> None:
@@ -454,9 +477,12 @@ def test_get_completed_scans_without_findings(monkeypatch: pytest.MonkeyPatch) -
     use_client(monkeypatch, FakeIngestClient(assets, statuses, {}))
     out = get_completed_scans(CONFIG, {"user": "u", "include_findings": "false"})
     assert len(out) == 1
+    # without a findings fetch there is no rollup: fields stay at their
+    # defaults rather than claiming "no findings"
     assert out[0]["result_count"] == 0
     assert out[0]["max_severity"] is None
-    assert "no findings" in out[0]["summary_text"].lower()
+    assert out[0]["summary_text"] == ""
+    assert out[0]["findings"] == []
 
 
 def test_get_completed_scans_caps_results(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -477,6 +503,85 @@ def test_get_completed_scans_caps_results(monkeypatch: pytest.MonkeyPatch) -> No
     assert len(out) == 2
     # oldest first
     assert out[0]["scan_at"].endswith("00.0Z")
+
+
+def test_get_completed_scans_since_epoch_filters_before_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The watermark drops old and undated scans and bounds findings fetches."""
+    old_epoch = parse_epoch("2021-06-01T00:00:00Z")
+    new_epoch = parse_epoch("2021-06-15T00:00:00Z")
+    assert old_epoch is not None and new_epoch is not None
+    assets = [
+        Asset(asset_name="http://old.com", uuid="uuid-old"),
+        Asset(asset_name="http://new.com", uuid="uuid-new"),
+        Asset(asset_name="http://undated.com", uuid="uuid-undated"),
+    ]
+    statuses = {
+        ("http://old.com", "uuid-old"): [
+            ScanStatusRow(
+                asset_name="http://old.com",
+                uuid="uuid-old",
+                scan_status="Scan Complete",
+                scan_at="2021-06-01T00:00:00Z",
+            )
+        ],
+        ("http://new.com", "uuid-new"): [
+            ScanStatusRow(
+                asset_name="http://new.com",
+                uuid="uuid-new",
+                scan_status="Scan Complete",
+                scan_at="2021-06-15T00:00:00Z",
+            )
+        ],
+        # no parseable timestamp on any field
+        ("http://undated.com", "uuid-undated"): [
+            ScanStatusRow(
+                asset_name="http://undated.com", uuid="uuid-undated", scan_status="Scan Complete"
+            )
+        ],
+    }
+
+    class Counting(FakeIngestClient):
+        def __init__(self, *args: Any) -> None:
+            super().__init__(*args)
+            self.results_calls: list[str] = []
+
+        def results(self, url: str, uuid: str) -> ScanResults:
+            self.results_calls.append(uuid)
+            return super().results(url, uuid)
+
+    fake = Counting(assets, statuses, {})
+    use_client(monkeypatch, fake)
+    out = get_completed_scans(CONFIG, {"user": "u", "since_epoch": str(new_epoch - 1)})
+
+    # old scan dropped (detected_ts < since_epoch); undated dropped (cannot
+    # be watermark-ordered); new scan delivered (filter is >=)
+    assert [scan["uuid"] for scan in out] == ["uuid-new"]
+    # findings were fetched ONLY for the survivor
+    assert fake.results_calls == ["uuid-new"]
+
+
+def test_get_completed_scans_since_epoch_boundary_is_inclusive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A scan completed exactly at the watermark is still delivered."""
+    boundary = parse_epoch("2021-06-15T02:56:51.279590Z")
+    assert boundary is not None
+    assets = [Asset(asset_name="http://done.com", uuid="uuid-done")]
+    statuses = {
+        ("http://done.com", "uuid-done"): [
+            ScanStatusRow(
+                asset_name="http://done.com",
+                uuid="uuid-done",
+                scan_status="Scan Complete",
+                scan_at="2021-06-15T02:56:51.279590Z",
+            )
+        ],
+    }
+    use_client(monkeypatch, FakeIngestClient(assets, statuses, {}))
+    out = get_completed_scans(CONFIG, {"user": "u", "since_epoch": str(boundary)})
+    assert [scan["uuid"] for scan in out] == ["uuid-done"]
 
 
 # ---------------------------------------------------------------------------

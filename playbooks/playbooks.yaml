@@ -29,47 +29,101 @@ exported_tags:
 
 playbooks:
 
-  # Data ingestion chain (Fetch / Ingest). -----------------------------------
+  # Data ingestion chain (Init Macros / Fetch / Ingest). ---------------------
   #
   # The Data Ingestion Wizard expects:
   #   * tags: every playbook carries #dataingestion, Fetch carries #fetch,
   #     Ingest carries #ingest and #create;
   #   * Fetch's Start step carries configuration_schema, the form the wizard
-  #     shows;
-  #   * Fetch ends in a set_variable ("Save Result") publishing `data`. Ingest
-  #     reads it back off the workflow_reference step ("List Completed Scans")
-  #     as vars.steps.List_Completed_Scans.data.
+  #     shows, and a "Configuration" set_variable whose vars the wizard
+  #     overwrites with the analyst's values;
+  #   * Fetch ends in a set_variable ("Save Result") publishing `data` (plus
+  #     the watermark macro name). Ingest reads them back off its
+  #     workflow_reference step ("Fetch Records").
   #
-  # Dedup is by upsert, not by a watermark: the alert's sourceId is the asset
-  # uuid FortiDAST scans under, so re-running the ingestion updates the
-  # existing alert for an asset instead of duplicating it. A rescan of the
-  # same asset therefore refreshes its alert with the newest findings. There
-  # is no last-pull-time macro: FortiDAST has no "list scans since T"
-  # endpoint, so every run enumerates the assets anyway, and Maximum Scans
-  # bounds how much one run does.
+  # Dedup is a last-pull-time watermark, not upsert alone: Get Completed
+  # Scans filters completed scans on detected_ts >= window_from (epoch
+  # seconds) BEFORE fetching any findings, and the alert's sourceId is the
+  # asset uuid, so a re-read window upserts (refreshes) instead of
+  # duplicating. The watermark macro advances only after Create Record
+  # succeeds, and a window that hits Maximum Records Per Run FAILS the run
+  # rather than advance the watermark past scans it never read.
 
-  - name: '> FortiDAST > Fetch'
+  - name: '>> Fortinet FortiDAST > Init Macros'
     description: >-
-      Enumerates the FortiDAST assets of a user and returns the ones whose
-      latest scan is complete, each with a severity rollup of its findings
-      (Get Completed Scans). The Data Ingestion Wizard reads this playbook's
-      output shape for its Data Mapping preview.
+      Creates the Fortinet FortiDAST last-pull-time macro if it does not
+      already exist. Called by Fetch during the wizard's environment-setup
+      pass, and by Fetch whenever the macro is missing.
+    tags:
+    - fortinet-fortidast
+    - dataingestion
+    is_active: true
+    parameters:
+    - FortinetFortiDASTMacroName
+    - FortinetFortiDASTMacroValue
+    - overrideIfNoMatch
+    steps:
+    - name: Start
+      type: start
+      next: Get Macros
+    - name: Get Macros
+      type: connector
+      connector: cyops_utilities
+      operation: make_cyops_request
+      config: ''
+      next: Macro Exists
+      params:
+        iri: /api/wf/api/dynamic-variable/?format=json&name={{vars.input.params.FortinetFortiDASTMacroName}}
+        body: ''
+        method: GET
+    - name: Macro Exists
+      type: decision
+      conditions:
+      - display: Not Exist
+        when: '{{ vars.steps.Get_Macros.data[''hydra:totalItems''] == 0 }}'
+        next: Create Macro
+      - display: Exist
+        default: true
+        next: Fetch Macro Current Value
+    - name: Create Macro
+      type: connector
+      connector: cyops_utilities
+      operation: make_cyops_request
+      config: ''
+      params:
+        iri: /api/wf/api/dynamic-variable/?format=json
+        body: '{ ''name'': ''{{vars.input.params.FortinetFortiDASTMacroName}}'', ''value'': ''{{vars.input.params.FortinetFortiDASTMacroValue}}'' }'
+        method: POST
+    - name: Fetch Macro Current Value
+      type: set_variable
+      vars:
+        macroExistingRecord: '{{vars.steps.Get_Macros.data[''hydra:member''][0]}}'
+      next: Update Macro If Required
+    - name: Update Macro If Required
+      type: connector
+      connector: cyops_utilities
+      operation: make_cyops_request
+      config: ''
+      when: '{{ (vars.input.params.overrideIfNoMatch == true) and (vars.macroExistingRecord.value != vars.input.params.FortinetFortiDASTMacroValue) }}'
+      params:
+        iri: /api/wf/api/dynamic-variable/{{ vars.macroExistingRecord.id }}/
+        body: '{ ''name'': ''{{vars.input.params.FortinetFortiDASTMacroName}}'', ''value'': ''{{vars.input.params.FortinetFortiDASTMacroValue}}'' }'
+        method: PUT
+
+  - name: '> Fortinet FortiDAST > Fetch'
+    description: >-
+      Reads the last-pull-time watermark and fetches FortiDAST scans
+      completed since then (Get Completed Scans filters on detected_ts >=
+      window_from before any findings are fetched), capped at Maximum
+      Records Per Run, oldest first.
     tags:
     - fortinet-fortidast
     - fetch
     - dataingestion
     is_active: true
-    parameters:
-    - username
-    - max_scans
-    - include_findings
     steps:
     - name: Start
       type: start
-      inputVariables:
-      - {name: username}
-      - {name: max_scans}
-      - {name: include_findings}
       configuration_schema:
       - title: FortiDAST User
         required: true
@@ -79,49 +133,92 @@ playbooks:
         name: username
         value: admin
         tooltip: The FortiDAST username whose assets the ingestion enumerates (Get Assets lists the assets of one user).
-      - title: Maximum Scans Per Run
+      - title: Initial Backfill (Days)
+        required: true
+        editable: true
+        visible: true
+        type: text
+        name: backfill_days
+        value: '7'
+        tooltip: How many days back the first run reads, before a last-pull-time watermark exists. Later runs read from the watermark.
+      - title: Maximum Records Per Run
         required: false
         editable: true
         visible: true
         type: text
-        name: max_scans
-        value: 100
-        tooltip: Cap on completed scans one run returns, oldest first. Each completed scan costs one extra API call when Include Findings is on; raise the cap or shorten the schedule rather than let it bind.
-      - title: Include Findings
-        required: false
-        editable: true
-        visible: true
-        type: select
-        name: include_findings
-        options:
-        - 'true'
-        - 'false'
-        value: 'true'
-        tooltip: Also fetch each completed scan's findings (severity rollup, summary text, the findings themselves). Turning this off lightens every run but the alerts then carry no findings.
+        name: max_items
+        value: '100'
+        tooltip: Safety cap on completed scans per run, oldest first. A window that reaches it FAILS the run instead of silently skipping scans; raise it or shorten the schedule rather than let it bind.
       next: Configuration
-
     - name: Configuration
       type: set_variable
       comment: |
-        Wizard-editable values. The defaults here are what a run uses when the
-        ingestion configuration delivered no inputs (manual run, or a
-        configuration saved before these fields existed).
+        Wizard-editable defaults; the schema field names map 1:1 onto these
+        keys (the wizard writes the analyst's values here). The macro name is
+        scoped to this playbook's UUID so two ingestion configurations never
+        share a watermark.
       vars:
-        username: "{{ vars.input.params.username | default('admin') }}"
-        max_scans: "{{ vars.input.params.max_scans | default(100) }}"
-        include_findings: "{{ vars.input.params.include_findings | default('true') }}"
+        username: admin
+        backfill_days: '7'
+        max_items: '100'
+        FortinetFortiDASTMacroName: FortinetFortiDASTLastPullTime_{{vars['audit_info']['cyops_playbook_iri'].split('/')[-1].replace('-','_')}}
+      next: Get Macro Value
+    - name: Get Macro Value
+      type: connector
+      connector: cyops_utilities
+      operation: make_cyops_request
+      config: ''
+      next: Environment Setup
+      params:
+        iri: /api/wf/api/dynamic-variable/?format=json&name={{vars.FortinetFortiDASTMacroName}}
+        body: ''
+        method: GET
+    - name: Environment Setup
+      type: workflow_reference
+      comment: |
+        Runs on the wizard's env_setup pass AND whenever the macro is
+        missing: Update Last Pull Time does not create it, so a missing macro
+        would re-read the backfill forever. Primed to '0', read as a cold
+        start.
+      when: '{{ vars.request.env_setup or not vars.steps.Get_Macro_Value.data["hydra:member"] }}'
+      target: '>> Fortinet FortiDAST > Init Macros'
+      FortinetFortiDASTMacroName: '{{vars.FortinetFortiDASTMacroName}}'
+      FortinetFortiDASTMacroValue: '0'
+      overrideIfNoMatch: 'false'
+      apply_async: false
+      pass_parent_env: false
+      pass_input_record: false
+      next: Set Time Configuration
+    - name: Set Time Configuration
+      type: set_variable
+      comment: |
+        The window end is 60s behind the clock and written back only after
+        Create Record succeeds. A cold start (macro missing or '0') reads now
+        minus the backfill instead of the watermark. Both window edges are
+        epoch seconds ("X"), the format Get Completed Scans compares
+        detected_ts against.
+      vars:
+        curr_timestamp: '{{ arrow.utcnow().shift(seconds=-60).format(''X'') }}'
+        last_pull_time: >-
+          {% if vars.request.env_setup or not vars.steps.Get_Macro_Value.data['hydra:member']
+          or vars.steps.Get_Macro_Value.data['hydra:member'][0].value == '0' %}{% else %}{{
+          vars.steps.Get_Macro_Value.data['hydra:member'][0].value }}{% endif %}
+        window_from: >-
+          {% if vars.last_pull_time %}{{ vars.last_pull_time }}{% else %}{{
+          arrow.utcnow().shift(days=-(vars.backfill_days|int)).format('X') }}{% endif %}
       next: Fetch
-
     - name: Fetch
       type: connector
       connector: fortinet-fortidast
       operation: get_completed_scans
       operationTitle: Get Completed Scans
       config: ''
-      params:
-        user: '{{vars.username}}'
-        max_scans: '{{vars.max_scans}}'
-        include_findings: '{{vars.include_findings}}'
+      comment: |
+        One record per completed scan in the window: scan metadata, the
+        severity rollup of its findings, summary_text for the alert
+        description, and detected_ts (epoch) for alertDetectionDate. The
+        since_epoch watermark bounds the API load: findings are fetched only
+        for the scans that survive the filter and the cap.
       mock_result:
         data:
         - asset_name: http://example.com
@@ -132,9 +229,9 @@ playbooks:
           scan_at: '2026-11-01T10:05:00.000000Z'
           detected_ts: 1793599500
           threat_level: 42
-          result_count: 1
+          result_count: 2
           max_severity: High
-          summary_text: 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1.'
+          summary_text: 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.'
           vulnhash_url: https://fortidast.forticloud.com/sso?scanresult/sample
           findings:
           - vulnerabilitytype: A1 - Injection
@@ -143,56 +240,78 @@ playbooks:
             cweid: 89
             vulnerabilitydescription: SQL injection in the search parameter.
             remediation: Use parameterized queries.
-      next: Save Result
-
+          - vulnerabilitytype: A5 - Misconfiguration
+            severity: Low
+            cvssscore: 3.1
+            cweid: 16
+            vulnerabilitydescription: Directory listing enabled.
+            remediation: Disable directory listing.
+      next: Within Cap
+      params:
+        user: '{{vars.username}}'
+        max_scans: '{{vars.max_items}}'
+        include_findings: 'true'
+        since_epoch: '{{vars.window_from}}'
+    - name: Within Cap
+      type: decision
+      comment: |
+        A window over Maximum Records Per Run fails the run rather than
+        advance the watermark past scans it never read. Get Completed Scans
+        caps at the same limit, so reaching the cap means the window was cut
+        short and must not be closed over the missing scans.
+      conditions:
+      - display: Over Cap
+        when: '{{ (vars.steps.Fetch.data | default([]) | length) >= (vars.max_items | int) }}'
+        next: Window Over Cap
+      - display: Within Cap
+        default: true
+        next: Save Result
+    - name: Window Over Cap
+      type: connector
+      connector: cyops_utilities
+      operation: raise_exception
+      config: ''
+      mock_result: |
+        {"error": "window over Maximum Records Per Run"}
+      params:
+        msg: '{{ (vars.steps.Fetch.data | default([]) | length) }} FortiDAST completed scans in the window
+          from {{vars.window_from}} reach Maximum Records Per Run ({{vars.max_items}}); the watermark was
+          not advanced. Raise the cap or shorten the schedule.'
     - name: Save Result
       type: set_variable
       comment: |
-        The Fetch -> Ingest contract. Ingest reads this off the workflow
-        reference step ("List Completed Scans") as
-        vars.steps.List_Completed_Scans.data.
+        The Fetch -> Ingest contract; Ingest reads these off its
+        workflow_reference step.
       vars:
-        data: '{{vars.steps.Fetch.data}}'
+        data: '{{ vars.steps.Fetch.data | default([]) }}'
+        current_time: '{{vars.curr_timestamp}}'
+        FortinetFortiDASTMacroName: '{{vars.FortinetFortiDASTMacroName}}'
 
-  - name: FortiDAST > Ingest
+  - name: Fortinet FortiDAST > Ingest
     description: >-
       Orchestrator: calls Fetch, then either returns a sample record for the
-      wizard's Data Mapping preview (env_setup mode) or creates one alert per
-      completed asset scan, upserted on the asset uuid so re-runs refresh
-      instead of duplicating.
+      wizard's Data Mapping preview (env_setup) or upserts one alerts record
+      per completed scan and advances the last-pull-time watermark.
     tags:
     - fortinet-fortidast
     - ingest
     - dataingestion
     - create
     is_active: true
-    parameters:
-    - username
-    - max_scans
-    - include_findings
     steps:
     - name: Start
       type: start
       module: alerts
-      button_label: 'FortiDAST > Ingest'
+      button_label: 'Fortinet FortiDAST > Ingest'
       requires_record: false
-      inputVariables:
-      - {name: username}
-      - {name: max_scans}
-      - {name: include_findings}
-      next: List Completed Scans
-
-    - name: List Completed Scans
+      next: Fetch Records
+    - name: Fetch Records
       type: workflow_reference
-      target: '> FortiDAST > Fetch'
+      target: '> Fortinet FortiDAST > Fetch'
       apply_async: false
       pass_parent_env: false
       pass_input_record: false
-      username: "{{ vars.input.params.username | default('admin') }}"
-      max_scans: "{{ vars.input.params.max_scans | default(100) }}"
-      include_findings: "{{ vars.input.params.include_findings | default('true') }}"
       next: Mapping Preview
-
     - name: Mapping Preview
       type: decision
       comment: |
@@ -208,7 +327,6 @@ playbooks:
       - display: Ingest
         default: true
         next: Configuration
-
     - name: Return Sample
       type: set_variable
       comment: |
@@ -218,37 +336,39 @@ playbooks:
         preview still renders.
       vars:
         sample: >-
-          {% if vars.steps.List_Completed_Scans.data | default([]) | length > 0 %}
-            {{ vars.steps.List_Completed_Scans.data[0] }}
+          {% if vars.steps.Fetch_Records.data | default([]) | length > 0 %}
+            {{ vars.steps.Fetch_Records.data[0] }}
           {% else %}
             {{ { 'asset_name': 'http://example.com', 'uuid': 'e0000000-0000-4000-8000-000000000000', 'scan_owner': 'owner@example.com', 'scan_status': 'Scan Complete', 'scan_started_at': '2026-11-01T10:00:00.000000Z', 'scan_at': '2026-11-01T10:05:00.000000Z', 'detected_ts': 1793599500, 'threat_level': 42, 'result_count': 2, 'max_severity': 'High', 'summary_text': 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.', 'vulnhash_url': 'https://fortidast.forticloud.com/sso?scanresult/sample', 'findings': [ { 'vulnerabilitytype': 'A1 - Injection', 'severity': 'High', 'cvssscore': 9.8, 'cweid': 89, 'vulnerabilitydescription': 'SQL injection in the search parameter.', 'remediation': 'Use parameterized queries.' }, { 'vulnerabilitytype': 'A5 - Misconfiguration', 'severity': 'Low', 'cvssscore': 3.1, 'cweid': 16, 'vulnerabilitydescription': 'Directory listing enabled.', 'remediation': 'Disable directory listing.' } ] } }}
           {% endif %}
-
     - name: Configuration
       type: set_variable
       comment: |
         The values the alerts take from the connector's output: the run's
-        completed scans. Severity comes from the per-scan rollup; a scan with
-        no findings ingests as Informational.
+        completed scans, the macro holding the watermark, and the vendor ->
+        picklist mappings Create Record reads with resolveRange. Edit the
+        mappings here.
       vars:
-        incident_source_data: '{{ vars.steps.List_Completed_Scans.data }}'
+        incident_source_data: '{{ vars.steps.Fetch_Records.data }}'
+        FortinetFortiDASTMacroName: '{{ vars.steps.Fetch_Records.FortinetFortiDASTMacroName }}'
+        severity_map: '{''critical'': {{ ''Severity'' | picklist(''Critical'') }}, ''high'': {{ ''Severity''
+          | picklist(''High'') }}, ''medium'': {{ ''Severity'' | picklist(''Medium'') }}, ''low'': {{ ''Severity''
+          | picklist(''Low'') }}, ''informational'': {{ ''Severity'' | picklist(''Informational'') }}}'
       next: Create Record
-
     - name: Create Record
       type: create_record
       module: alerts
       operation: Overwrite
       is_upsert: true
-      on_conflict: update_all
       comment: |
         The step is named "Create Record" because the Data Ingestion Wizard's
         Data Mapping page is shown only for a create playbook with a step of
         exactly that name, and it reads the target module off this step.
 
         is_upsert routes this at /api/3/upsert/alerts, keyed on sourceId (the
-        asset uuid), so a re-run refreshes the asset's alert instead of
-        duplicating it, and a rescan updates the same alert with the newest
-        findings.
+        asset uuid), so a re-read window refreshes the asset's alert instead
+        of duplicating it. __fieldsToUpdate leaves the create-only fields
+        (state/status) alone on an update, so a re-read never resets triage.
 
         Only the alert fields below are set. The raw scan row plus its
         findings are kept as JSON in sourcedata (sourcedata must stay
@@ -256,16 +376,34 @@ playbooks:
         "Array").
       for_each:
         item: '{{ vars.incident_source_data }}'
-        __bulk: true
-        batch_size: 100
         condition: ''
       fields:
         name: "FortiDAST scan findings for {{ vars.item.asset_name }}"
         source: Fortinet FortiDAST
-        sourceId: '{{ vars.item.uuid }}'
-        severity: '{{ "Severity" | picklist(vars.item.max_severity | default("Informational")) }}'
+        sourceId: '{{ vars.item.uuid | string }}'
+        severity: '{{ ((vars.item.max_severity) | default('''') | string | lower | resolveRange(vars.severity_map))
+          or (''Severity'' | picklist(''Informational'')) }}'
         alertDetectionDate: '{{ vars.item.detected_ts }}'
         # The summary is assembled from FortiDAST data and the description is
         # rich text: escape it.
-        description: "{{ vars.item.summary_text | e }}{% if vars.item.vulnhash_url %}<br><br>Scan results: <a href=\"{{ vars.item.vulnhash_url | e }}\">Open in FortiDAST</a>{% endif %}"
+        description: '{{ vars.item.summary_text | e }}{% if vars.item.vulnhash_url %}<br><br>Scan results:
+          <a href="{{ vars.item.vulnhash_url | e }}">Open in FortiDAST</a>{% endif %}'
         sourcedata: '{{ vars.item | toJSON }}'
+        state: '{{ "AlertState" | picklist("New") }}'
+        status: '{{ "AlertStatus" | picklist("Open") }}'
+        __replace: 'true'
+        __fieldsToUpdate: '{{ [''name'', ''source'', ''sourceId'', ''severity'', ''description'',
+          ''alertDetectionDate'', ''sourcedata''] }}'
+      next: Update Last Pull Time
+    - name: Update Last Pull Time
+      type: connector
+      connector: cyops_utilities
+      operation: updatemacro
+      config: ''
+      operationTitle: 'FSR: Update Global Variables'
+      comment: |
+        Advance the watermark LAST, only after the records are written: a
+        failed create must leave the window open for the next run.
+      params:
+        macro: '{{vars.FortinetFortiDASTMacroName}}'
+        value: '{{vars.steps.Fetch_Records.current_time}}'

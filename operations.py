@@ -25,7 +25,6 @@ from .lib.fortidast.models import (
     AssetRefParams,
     CompletedScan,
     CompletedScansParams,
-    Finding,
     ScanResults,
     ScanSchedule,
     ScanScheduleRequest,
@@ -285,10 +284,15 @@ def get_completed_scans(
 
     One record per asset: scan metadata, a severity rollup over its findings,
     a plain-text summary for the alert description, and (when include_findings
-    is on) the findings themselves. Records carry ``detected_ts`` (epoch from
-    the scan timestamp) so playbooks can map it to alertDetectionDate, and the
-    asset uuid doubles as the alert sourceId so re-runs upsert instead of
+    is on) the findings themselves. Records carry ``detected_ts`` (epoch of the
+    scan's latest timestamp) so playbooks can map it to alertDetectionDate, and
+    the asset uuid doubles as the alert sourceId so re-runs upsert instead of
     duplicating.
+
+    ``since_epoch`` (the ingestion watermark) drops scans whose detected_ts is
+    older than it BEFORE findings are fetched, so an advanced watermark also
+    bounds the API load. The filter is >= : a scan that completed exactly at
+    the watermark is still delivered.
     """
     p = _params(CompletedScansParams, params)
     client = _client(config)
@@ -297,6 +301,7 @@ def get_completed_scans(
     except FortiDASTError as err:
         raise ConnectorError(str(err)) from err
 
+    # Phase 1: collect completed-scan shells (no findings yet).
     scans: list[CompletedScan] = []
     for asset in assets:
         try:
@@ -307,23 +312,37 @@ def get_completed_scans(
         for row in rows:
             if (row.scan_status or "").strip().lower() != "scan complete":
                 continue
-            findings: list[Finding] = []
-            vulnhash_url = ""
-            if p.include_findings:
-                try:
-                    results: ScanResults = client.results(asset.asset_name, asset.uuid)
-                    findings = results.results
-                    vulnhash_url = results.vulnhash_url or ""
-                except FortiDASTError as err:
-                    logger.warning("results failed for %s: %s", asset.asset_name, err)
-            scans.append(CompletedScan.from_row(row, asset, findings, vulnhash_url))
+            scan = CompletedScan.from_row(row, asset)
+            if p.since_epoch is not None and (
+                scan.detected_ts is None or scan.detected_ts < p.since_epoch
+            ):
+                # A row without a parseable timestamp cannot be watermark-
+                # ordered, so it is dropped when a watermark is active;
+                # delivering it would re-open the window forever. Rows are
+                # only dropped here (never by max_scans): capping keeps every
+                # remaining record below the next watermark, so nothing is
+                # lost, just deferred to the next pull.
+                continue
+            scans.append(scan)
 
     scans.sort(key=lambda scan: scan.detected_ts or 0)
     if len(scans) > p.max_scans:
         logger.info(
-            "get_completed_scans: %d completed scans, capped at %d", len(scans), p.max_scans
+            "get_completed_scans: %d completed scans in window, capped at %d",
+            len(scans),
+            p.max_scans,
         )
         scans = scans[: p.max_scans]
+
+    # Phase 2: findings only for the scans that survived filter + cap.
+    if p.include_findings:
+        for scan in scans:
+            try:
+                results: ScanResults = client.results(scan.asset_name, scan.uuid)
+            except FortiDASTError as err:
+                logger.warning("results failed for %s: %s", scan.asset_name, err)
+                continue
+            scan.attach_findings(results.results, results.vulnhash_url or "")
     return [scan.model_dump(mode="json") for scan in scans]
 
 

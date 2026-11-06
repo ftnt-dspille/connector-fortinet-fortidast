@@ -25,51 +25,38 @@
       "workflows": [
         {
           "@type": "Workflow",
-          "name": "> FortiDAST > Fetch",
+          "name": ">> Fortinet FortiDAST > Init Macros",
           "aliasName": null,
           "tag": "",
           "recordTags": [
             "fortinet-fortidast",
-            "fetch",
             "dataingestion"
           ],
-          "description": "Enumerates the FortiDAST assets of a user and returns the ones whose latest scan is complete, each with a severity rollup of its findings (Get Completed Scans). The Data Ingestion Wizard reads this playbook's output shape for its Data Mapping preview.",
+          "description": "Creates the Fortinet FortiDAST last-pull-time macro if it does not already exist. Called by Fetch during the wizard's environment-setup pass, and by Fetch whenever the macro is missing.",
           "isActive": true,
           "debug": false,
           "singleRecordExecution": false,
           "remoteExecutableFlag": 0,
           "parameters": [
-            "username",
-            "max_scans",
-            "include_findings"
+            "FortinetFortiDASTMacroName",
+            "FortinetFortiDASTMacroValue",
+            "overrideIfNoMatch"
           ],
           "synchronous": false,
-          "lastModifyDate": 1793910525,
+          "lastModifyDate": 1793927061,
           "collection": "/api/3/workflow_collections/fc74c089-bd0f-5400-90a8-637092179714",
           "versions": [],
-          "triggerStep": "/api/3/workflow_steps/344bcdf8-f461-57ea-9bed-de832f1c9cf4",
+          "triggerStep": "/api/3/workflow_steps/c2f683cc-ecf5-5c9c-a934-64f9a5991392",
           "steps": [
             {
               "@type": "WorkflowStep",
               "name": "Start",
               "description": null,
               "arguments": {
-                "inputVariables": [
-                  {
-                    "name": "username"
-                  },
-                  {
-                    "name": "max_scans"
-                  },
-                  {
-                    "name": "include_findings"
-                  }
-                ],
                 "step_variables": {
                   "input": {
                     "params": []
-                  },
-                  "_configuration_schema": "[{\"title\": \"FortiDAST User\", \"required\": true, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"username\", \"value\": \"admin\", \"tooltip\": \"The FortiDAST username whose assets the ingestion enumerates (Get Assets lists the assets of one user).\"}, {\"title\": \"Maximum Scans Per Run\", \"required\": false, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"max_scans\", \"value\": 100, \"tooltip\": \"Cap on completed scans one run returns, oldest first. Each completed scan costs one extra API call when Include Findings is on; raise the cap or shorten the schedule rather than let it bind.\"}, {\"title\": \"Include Findings\", \"required\": false, \"editable\": true, \"visible\": true, \"type\": \"select\", \"name\": \"include_findings\", \"options\": [\"true\", \"false\"], \"value\": \"true\", \"tooltip\": \"Also fetch each completed scan's findings (severity rollup, summary text, the findings themselves). Turning this off lightens every run but the alerts then carry no findings.\"}]"
+                  }
                 }
               },
               "status": null,
@@ -77,23 +64,311 @@
               "left": "200",
               "stepType": "/api/3/workflow_step_types/b348f017-9a94-471f-87f8-ce88b6a7ad62",
               "group": null,
-              "uuid": "344bcdf8-f461-57ea-9bed-de832f1c9cf4"
+              "uuid": "c2f683cc-ecf5-5c9c-a934-64f9a5991392"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Get Macros",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "config": "",
+                "params": {
+                  "iri": "/api/wf/api/dynamic-variable/?format=json&name={{vars.input.params.FortinetFortiDASTMacroName}}",
+                  "body": "",
+                  "method": "GET"
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "250",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "a7357a83-88e3-5e65-ad92-689a8a302eee"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Macro Exists",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": "Not Exist",
+                    "condition": "{{ vars.steps.Get_Macros.data['hydra:totalItems'] == 0 }}",
+                    "step_iri": "/api/3/workflow_steps/1ad4995b-48ed-5e4d-b508-b89a3e1d8e8f",
+                    "step_name": "Create Macro"
+                  },
+                  {
+                    "option": "Exist",
+                    "default": true,
+                    "step_iri": "/api/3/workflow_steps/ca89ebca-09be-5bb8-ba6f-16aa493a3365",
+                    "step_name": "Fetch Macro Current Value"
+                  }
+                ]
+              },
+              "status": null,
+              "top": "380",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "dcbb43ad-d01f-5401-8641-f71228cf4bcd"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Create Macro",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "config": "",
+                "params": {
+                  "iri": "/api/wf/api/dynamic-variable/?format=json",
+                  "body": "{ 'name': '{{vars.input.params.FortinetFortiDASTMacroName}}', 'value': '{{vars.input.params.FortinetFortiDASTMacroValue}}' }",
+                  "method": "POST"
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "510",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "1ad4995b-48ed-5e4d-b508-b89a3e1d8e8f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Fetch Macro Current Value",
+              "description": null,
+              "arguments": {
+                "macroExistingRecord": "{{vars.steps.Get_Macros.data['hydra:member'][0]}}"
+              },
+              "status": null,
+              "top": "510",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "ca89ebca-09be-5bb8-ba6f-16aa493a3365"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Update Macro If Required",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "config": "",
+                "when": "{{ (vars.input.params.overrideIfNoMatch == true) and (vars.macroExistingRecord.value != vars.input.params.FortinetFortiDASTMacroValue) }}",
+                "params": {
+                  "iri": "/api/wf/api/dynamic-variable/{{ vars.macroExistingRecord.id }}/",
+                  "body": "{ 'name': '{{vars.input.params.FortinetFortiDASTMacroName}}', 'value': '{{vars.input.params.FortinetFortiDASTMacroValue}}' }",
+                  "method": "PUT"
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "640",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "06777e09-1666-5e63-8681-32c8029e1584"
+            }
+          ],
+          "routes": [
+            {
+              "@type": "WorkflowRoute",
+              "name": "Start -> Get Macros",
+              "targetStep": "/api/3/workflow_steps/a7357a83-88e3-5e65-ad92-689a8a302eee",
+              "sourceStep": "/api/3/workflow_steps/c2f683cc-ecf5-5c9c-a934-64f9a5991392",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "68f4890c-b8fc-54f0-b01c-360fcbf16c42"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Get Macros -> Macro Exists",
+              "targetStep": "/api/3/workflow_steps/dcbb43ad-d01f-5401-8641-f71228cf4bcd",
+              "sourceStep": "/api/3/workflow_steps/a7357a83-88e3-5e65-ad92-689a8a302eee",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "ecb829b2-a17b-5efd-8332-35bd7c83d4ec"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Macro Exists -> Create Macro",
+              "targetStep": "/api/3/workflow_steps/1ad4995b-48ed-5e4d-b508-b89a3e1d8e8f",
+              "sourceStep": "/api/3/workflow_steps/dcbb43ad-d01f-5401-8641-f71228cf4bcd",
+              "label": "Not Exist",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "f78942c0-f7d1-57d8-86fe-cfadfc8e1033"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Macro Exists -> Fetch Macro Current Value",
+              "targetStep": "/api/3/workflow_steps/ca89ebca-09be-5bb8-ba6f-16aa493a3365",
+              "sourceStep": "/api/3/workflow_steps/dcbb43ad-d01f-5401-8641-f71228cf4bcd",
+              "label": "Exist",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "c98acb24-9827-5161-a62a-6d1fe93f8d13"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Fetch Macro Current Value -> Update Macro If Required",
+              "targetStep": "/api/3/workflow_steps/06777e09-1666-5e63-8681-32c8029e1584",
+              "sourceStep": "/api/3/workflow_steps/ca89ebca-09be-5bb8-ba6f-16aa493a3365",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "2fa44eea-34e3-5d38-b9d7-cf783a463974"
+            }
+          ],
+          "groups": [],
+          "priority": "/api/3/picklists/9e8d41e4-8ada-4a2c-bd02-07f62c6d0a00",
+          "playbookOrigin": null,
+          "isEditable": true,
+          "uuid": "2309a728-38d9-5927-8459-02099936bfed",
+          "owners": [],
+          "isPrivate": false
+        },
+        {
+          "@type": "Workflow",
+          "name": "> Fortinet FortiDAST > Fetch",
+          "aliasName": null,
+          "tag": "",
+          "recordTags": [
+            "fortinet-fortidast",
+            "fetch",
+            "dataingestion"
+          ],
+          "description": "Reads the last-pull-time watermark and fetches FortiDAST scans completed since then (Get Completed Scans filters on detected_ts >= window_from before any findings are fetched), capped at Maximum Records Per Run, oldest first.",
+          "isActive": true,
+          "debug": false,
+          "singleRecordExecution": false,
+          "remoteExecutableFlag": 0,
+          "parameters": [],
+          "synchronous": false,
+          "lastModifyDate": 1793927061,
+          "collection": "/api/3/workflow_collections/fc74c089-bd0f-5400-90a8-637092179714",
+          "versions": [],
+          "triggerStep": "/api/3/workflow_steps/9ceaafc8-2cbd-5b04-83ef-2b9d56839aa4",
+          "steps": [
+            {
+              "@type": "WorkflowStep",
+              "name": "Start",
+              "description": null,
+              "arguments": {
+                "step_variables": {
+                  "input": {
+                    "params": []
+                  },
+                  "_configuration_schema": "[{\"title\": \"FortiDAST User\", \"required\": true, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"username\", \"value\": \"admin\", \"tooltip\": \"The FortiDAST username whose assets the ingestion enumerates (Get Assets lists the assets of one user).\"}, {\"title\": \"Initial Backfill (Days)\", \"required\": true, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"backfill_days\", \"value\": \"7\", \"tooltip\": \"How many days back the first run reads, before a last-pull-time watermark exists. Later runs read from the watermark.\"}, {\"title\": \"Maximum Records Per Run\", \"required\": false, \"editable\": true, \"visible\": true, \"type\": \"text\", \"name\": \"max_items\", \"value\": \"100\", \"tooltip\": \"Safety cap on completed scans per run, oldest first. A window that reaches it FAILS the run instead of silently skipping scans; raise it or shorten the schedule rather than let it bind.\"}]"
+                }
+              },
+              "status": null,
+              "top": "120",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/b348f017-9a94-471f-87f8-ce88b6a7ad62",
+              "group": null,
+              "uuid": "9ceaafc8-2cbd-5b04-83ef-2b9d56839aa4"
             },
             {
               "@type": "WorkflowStep",
               "name": "Configuration",
               "description": null,
               "arguments": {
-                "username": "{{ vars.input.params.username | default('admin') }}",
-                "max_scans": "{{ vars.input.params.max_scans | default(100) }}",
-                "include_findings": "{{ vars.input.params.include_findings | default('true') }}"
+                "username": "admin",
+                "backfill_days": "7",
+                "max_items": "100",
+                "FortinetFortiDASTMacroName": "FortinetFortiDASTLastPullTime_{{vars['audit_info']['cyops_playbook_iri'].split('/')[-1].replace('-','_')}}"
               },
               "status": null,
               "top": "250",
               "left": "200",
               "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
               "group": null,
-              "uuid": "72bfd84f-1387-51f0-8fa6-c131c1895e16"
+              "uuid": "1cb08c11-e488-57a2-9ed5-74a8cafd9a3a"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Get Macro Value",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "make_cyops_request",
+                "config": "",
+                "params": {
+                  "iri": "/api/wf/api/dynamic-variable/?format=json&name={{vars.FortinetFortiDASTMacroName}}",
+                  "body": "",
+                  "method": "GET"
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "operationTitle": "FSR: Make FortiSOAR API Call",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "380",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "9cc0f5ad-3bf8-5183-83d9-54d7531a8eb4"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Environment Setup",
+              "description": null,
+              "arguments": {
+                "when": "{{ vars.request.env_setup or not vars.steps.Get_Macro_Value.data[\"hydra:member\"] }}",
+                "apply_async": false,
+                "pass_parent_env": false,
+                "pass_input_record": false,
+                "arguments": {
+                  "FortinetFortiDASTMacroName": "{{vars.FortinetFortiDASTMacroName}}",
+                  "FortinetFortiDASTMacroValue": "0",
+                  "overrideIfNoMatch": "false"
+                },
+                "workflowReference": "/api/3/workflows/2309a728-38d9-5927-8459-02099936bfed"
+              },
+              "status": null,
+              "top": "510",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/74932bdc-b8b6-4d24-88c4-1a4dfbc524f3",
+              "group": null,
+              "uuid": "5a01b547-768e-59d0-b21d-11a2df75024a"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Set Time Configuration",
+              "description": null,
+              "arguments": {
+                "curr_timestamp": "{{ arrow.utcnow().shift(seconds=-60).format('X') }}",
+                "last_pull_time": "{% if vars.request.env_setup or not vars.steps.Get_Macro_Value.data['hydra:member'] or vars.steps.Get_Macro_Value.data['hydra:member'][0].value == '0' %}{% else %}{{ vars.steps.Get_Macro_Value.data['hydra:member'][0].value }}{% endif %}",
+                "window_from": "{% if vars.last_pull_time %}{{ vars.last_pull_time }}{% else %}{{ arrow.utcnow().shift(days=-(vars.backfill_days|int)).format('X') }}{% endif %}"
+              },
+              "status": null,
+              "top": "640",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
+              "group": null,
+              "uuid": "e985c768-69aa-5ee6-96f7-945a3913c17e"
             },
             {
               "@type": "WorkflowStep",
@@ -104,76 +379,181 @@
                 "operation": "get_completed_scans",
                 "operationTitle": "Get Completed Scans",
                 "config": "",
+                "mock_result": "{\n  \"data\": [\n    {\n      \"asset_name\": \"http://example.com\",\n      \"uuid\": \"e0000000-0000-4000-8000-000000000000\",\n      \"scan_owner\": \"owner@example.com\",\n      \"scan_status\": \"Scan Complete\",\n      \"scan_started_at\": \"2026-11-01T10:00:00.000000Z\",\n      \"scan_at\": \"2026-11-01T10:05:00.000000Z\",\n      \"detected_ts\": 1793599500,\n      \"threat_level\": 42,\n      \"result_count\": 2,\n      \"max_severity\": \"High\",\n      \"summary_text\": \"FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.\",\n      \"vulnhash_url\": \"https://fortidast.forticloud.com/sso?scanresult/sample\",\n      \"findings\": [\n        {\n          \"vulnerabilitytype\": \"A1 - Injection\",\n          \"severity\": \"High\",\n          \"cvssscore\": 9.8,\n          \"cweid\": 89,\n          \"vulnerabilitydescription\": \"SQL injection in the search parameter.\",\n          \"remediation\": \"Use parameterized queries.\"\n        },\n        {\n          \"vulnerabilitytype\": \"A5 - Misconfiguration\",\n          \"severity\": \"Low\",\n          \"cvssscore\": 3.1,\n          \"cweid\": 16,\n          \"vulnerabilitydescription\": \"Directory listing enabled.\",\n          \"remediation\": \"Disable directory listing.\"\n        }\n      ]\n    }\n  ]\n}",
                 "params": {
                   "user": "{{vars.username}}",
-                  "max_scans": "{{vars.max_scans}}",
-                  "include_findings": "{{vars.include_findings}}"
+                  "max_scans": "{{vars.max_items}}",
+                  "include_findings": "true",
+                  "since_epoch": "{{vars.window_from}}"
                 },
-                "mock_result": "{\n  \"data\": [\n    {\n      \"asset_name\": \"http://example.com\",\n      \"uuid\": \"e0000000-0000-4000-8000-000000000000\",\n      \"scan_owner\": \"owner@example.com\",\n      \"scan_status\": \"Scan Complete\",\n      \"scan_started_at\": \"2026-11-01T10:00:00.000000Z\",\n      \"scan_at\": \"2026-11-01T10:05:00.000000Z\",\n      \"detected_ts\": 1793599500,\n      \"threat_level\": 42,\n      \"result_count\": 1,\n      \"max_severity\": \"High\",\n      \"summary_text\": \"FortiDAST scan of http://example.com completed. Findings by severity: High: 1.\",\n      \"vulnhash_url\": \"https://fortidast.forticloud.com/sso?scanresult/sample\",\n      \"findings\": [\n        {\n          \"vulnerabilitytype\": \"A1 - Injection\",\n          \"severity\": \"High\",\n          \"cvssscore\": 9.8,\n          \"cweid\": 89,\n          \"vulnerabilitydescription\": \"SQL injection in the search parameter.\",\n          \"remediation\": \"Use parameterized queries.\"\n        }\n      ]\n    }\n  ]\n}",
                 "version": "1.0.0",
                 "name": "Fortinet FortiDAST",
                 "step_variables": [],
                 "pickFromTenant": false
               },
               "status": null,
-              "top": "380",
+              "top": "770",
               "left": "200",
               "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
               "group": null,
-              "uuid": "38035ef7-8b48-5f76-92e3-0bd36970376b"
+              "uuid": "ceef282d-ea0f-5f1d-85c3-725bc98d757e"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Within Cap",
+              "description": null,
+              "arguments": {
+                "conditions": [
+                  {
+                    "option": "Over Cap",
+                    "condition": "{{ (vars.steps.Fetch.data | default([]) | length) >= (vars.max_items | int) }}",
+                    "step_iri": "/api/3/workflow_steps/387643ba-ebb2-50e4-b9bb-b9840ae661b5",
+                    "step_name": "Window Over Cap"
+                  },
+                  {
+                    "option": "Within Cap",
+                    "default": true,
+                    "step_iri": "/api/3/workflow_steps/c05af3d2-58eb-519a-82cf-264b2cc69f9f",
+                    "step_name": "Save Result"
+                  }
+                ]
+              },
+              "status": null,
+              "top": "900",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
+              "group": null,
+              "uuid": "27297a6a-0bb6-5809-82ab-b127d72e976f"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Window Over Cap",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "raise_exception",
+                "config": "",
+                "mock_result": "{\"error\": \"window over Maximum Records Per Run\"}\n",
+                "params": {
+                  "msg": "{{ (vars.steps.Fetch.data | default([]) | length) }} FortiDAST completed scans in the window from {{vars.window_from}} reach Maximum Records Per Run ({{vars.max_items}}); the watermark was not advanced. Raise the cap or shorten the schedule."
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "operationTitle": "Utils: Raise Exception",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "1030",
+              "left": "200",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "387643ba-ebb2-50e4-b9bb-b9840ae661b5"
             },
             {
               "@type": "WorkflowStep",
               "name": "Save Result",
               "description": null,
               "arguments": {
-                "data": "{{vars.steps.Fetch.data}}"
+                "data": "{{ vars.steps.Fetch.data | default([]) }}",
+                "current_time": "{{vars.curr_timestamp}}",
+                "FortinetFortiDASTMacroName": "{{vars.FortinetFortiDASTMacroName}}"
               },
               "status": null,
-              "top": "510",
-              "left": "200",
+              "top": "1030",
+              "left": "540",
               "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
               "group": null,
-              "uuid": "b2207581-8323-531b-985d-42212a1261c0"
+              "uuid": "c05af3d2-58eb-519a-82cf-264b2cc69f9f"
             }
           ],
           "routes": [
             {
               "@type": "WorkflowRoute",
               "name": "Start -> Configuration",
-              "targetStep": "/api/3/workflow_steps/72bfd84f-1387-51f0-8fa6-c131c1895e16",
-              "sourceStep": "/api/3/workflow_steps/344bcdf8-f461-57ea-9bed-de832f1c9cf4",
+              "targetStep": "/api/3/workflow_steps/1cb08c11-e488-57a2-9ed5-74a8cafd9a3a",
+              "sourceStep": "/api/3/workflow_steps/9ceaafc8-2cbd-5b04-83ef-2b9d56839aa4",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "5db6e853-9e35-5d46-a777-ebfd0d83216f"
+              "uuid": "2a0a71e6-35c2-55c5-b264-8643485f3a5c"
             },
             {
               "@type": "WorkflowRoute",
-              "name": "Configuration -> Fetch",
-              "targetStep": "/api/3/workflow_steps/38035ef7-8b48-5f76-92e3-0bd36970376b",
-              "sourceStep": "/api/3/workflow_steps/72bfd84f-1387-51f0-8fa6-c131c1895e16",
+              "name": "Configuration -> Get Macro Value",
+              "targetStep": "/api/3/workflow_steps/9cc0f5ad-3bf8-5183-83d9-54d7531a8eb4",
+              "sourceStep": "/api/3/workflow_steps/1cb08c11-e488-57a2-9ed5-74a8cafd9a3a",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "f7145552-20cd-5e13-b3a0-facddbfc3f3a"
+              "uuid": "d93609dc-d822-5101-86cc-d34d493edc2c"
             },
             {
               "@type": "WorkflowRoute",
-              "name": "Fetch -> Save Result",
-              "targetStep": "/api/3/workflow_steps/b2207581-8323-531b-985d-42212a1261c0",
-              "sourceStep": "/api/3/workflow_steps/38035ef7-8b48-5f76-92e3-0bd36970376b",
+              "name": "Get Macro Value -> Environment Setup",
+              "targetStep": "/api/3/workflow_steps/5a01b547-768e-59d0-b21d-11a2df75024a",
+              "sourceStep": "/api/3/workflow_steps/9cc0f5ad-3bf8-5183-83d9-54d7531a8eb4",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "daa9d98b-e24a-542b-8aa9-3066b8538ba3"
+              "uuid": "5df8deb7-cef2-5932-b104-105695cf7ab9"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Environment Setup -> Set Time Configuration",
+              "targetStep": "/api/3/workflow_steps/e985c768-69aa-5ee6-96f7-945a3913c17e",
+              "sourceStep": "/api/3/workflow_steps/5a01b547-768e-59d0-b21d-11a2df75024a",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "d493fd37-9b2c-5500-a5df-e5ef9b104e22"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Set Time Configuration -> Fetch",
+              "targetStep": "/api/3/workflow_steps/ceef282d-ea0f-5f1d-85c3-725bc98d757e",
+              "sourceStep": "/api/3/workflow_steps/e985c768-69aa-5ee6-96f7-945a3913c17e",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "6b6bdacc-a4be-50b4-94ac-f0476f637727"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Fetch -> Within Cap",
+              "targetStep": "/api/3/workflow_steps/27297a6a-0bb6-5809-82ab-b127d72e976f",
+              "sourceStep": "/api/3/workflow_steps/ceef282d-ea0f-5f1d-85c3-725bc98d757e",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "bf46d731-4ef2-59bf-a445-fc5e2fa02253"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Within Cap -> Window Over Cap",
+              "targetStep": "/api/3/workflow_steps/387643ba-ebb2-50e4-b9bb-b9840ae661b5",
+              "sourceStep": "/api/3/workflow_steps/27297a6a-0bb6-5809-82ab-b127d72e976f",
+              "label": "Over Cap",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "3d4e7f8a-125f-5a7e-8be6-2eb63e21efd6"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Within Cap -> Save Result",
+              "targetStep": "/api/3/workflow_steps/c05af3d2-58eb-519a-82cf-264b2cc69f9f",
+              "sourceStep": "/api/3/workflow_steps/27297a6a-0bb6-5809-82ab-b127d72e976f",
+              "label": "Within Cap",
+              "isExecuted": false,
+              "group": null,
+              "uuid": "061f9dd4-38d2-59e6-9d08-24a060ec02a4"
             }
           ],
           "groups": [
             {
               "@type": "WorkflowGroup",
               "name": "Note: Configuration",
-              "description": "Wizard-editable values. The defaults here are what a run uses when the\ningestion configuration delivered no inputs (manual run, or a\nconfiguration saved before these fields existed).\n",
+              "description": "Wizard-editable defaults; the schema field names map 1:1 onto these\nkeys (the wizard writes the analyst's values here). The macro name is\nscoped to this playbook's UUID so two ingestion configurations never\nshare a watermark.\n",
               "type": "note",
               "isCollapsed": false,
               "hasTriggerStep": false,
@@ -182,15 +562,15 @@
               "reusable": false,
               "top": "250",
               "left": "540",
-              "height": "160",
+              "height": "204",
               "width": "440",
-              "uuid": "f3647483-856b-57bb-a34e-cb1f6f8273b2",
+              "uuid": "e8dab38e-f5fe-5b3f-819b-35d53cd1883e",
               "recordTags": []
             },
             {
               "@type": "WorkflowGroup",
-              "name": "Note: Save Result",
-              "description": "The Fetch -> Ingest contract. Ingest reads this off the workflow\nreference step (\"List Completed Scans\") as\nvars.steps.List_Completed_Scans.data.\n",
+              "name": "Note: Environment Setup",
+              "description": "Runs on the wizard's env_setup pass AND whenever the macro is\nmissing: Update Last Pull Time does not create it, so a missing macro\nwould re-read the backfill forever. Primed to '0', read as a cold\nstart.\n",
               "type": "note",
               "isCollapsed": false,
               "hasTriggerStep": false,
@@ -199,22 +579,90 @@
               "reusable": false,
               "top": "510",
               "left": "540",
-              "height": "138",
+              "height": "204",
               "width": "440",
-              "uuid": "95fb0821-128f-5cbd-b7c2-72b9f6ea0361",
+              "uuid": "e389d61c-481b-515d-88b3-bb01cea7cfd4",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Set Time Configuration",
+              "description": "The window end is 60s behind the clock and written back only after\nCreate Record succeeds. A cold start (macro missing or '0') reads now\nminus the backfill instead of the watermark. Both window edges are\nepoch seconds (\"X\"), the format Get Completed Scans compares\ndetected_ts against.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "734",
+              "left": "880",
+              "height": "248",
+              "width": "440",
+              "uuid": "4987fe90-4c7d-5686-b2a0-1c6eb7ecc57a",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Fetch",
+              "description": "One record per completed scan in the window: scan metadata, the\nseverity rollup of its findings, summary_text for the alert\ndescription, and detected_ts (epoch) for alertDetectionDate. The\nsince_epoch watermark bounds the API load: findings are fetched only\nfor the scans that survive the filter and the cap.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "1002",
+              "left": "880",
+              "height": "248",
+              "width": "440",
+              "uuid": "be062a56-d90e-5f58-a636-a12759e4aa81",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Within Cap",
+              "description": "A window over Maximum Records Per Run fails the run rather than\nadvance the watermark past scans it never read. Get Completed Scans\ncaps at the same limit, so reaching the cap means the window was cut\nshort and must not be closed over the missing scans.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "1270",
+              "left": "540",
+              "height": "204",
+              "width": "440",
+              "uuid": "a5ef75dc-1551-543f-b174-5031cf06641b",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Save Result",
+              "description": "The Fetch -> Ingest contract; Ingest reads these off its\nworkflow_reference step.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "1494",
+              "left": "880",
+              "height": "94",
+              "width": "440",
+              "uuid": "8100a0fa-0c51-5a49-8360-c6870fa0848d",
               "recordTags": []
             }
           ],
           "priority": "/api/3/picklists/9e8d41e4-8ada-4a2c-bd02-07f62c6d0a00",
           "playbookOrigin": null,
           "isEditable": true,
-          "uuid": "a687d779-f51b-5aa1-bd96-bb828a9e37ed",
+          "uuid": "dec20f52-4e0f-5ff9-945d-b122c6fe8106",
           "owners": [],
           "isPrivate": false
         },
         {
           "@type": "Workflow",
-          "name": "FortiDAST > Ingest",
+          "name": "Fortinet FortiDAST > Ingest",
           "aliasName": null,
           "tag": "",
           "recordTags": [
@@ -223,50 +671,32 @@
             "dataingestion",
             "create"
           ],
-          "description": "Orchestrator: calls Fetch, then either returns a sample record for the wizard's Data Mapping preview (env_setup mode) or creates one alert per completed asset scan, upserted on the asset uuid so re-runs refresh instead of duplicating.",
+          "description": "Orchestrator: calls Fetch, then either returns a sample record for the wizard's Data Mapping preview (env_setup) or upserts one alerts record per completed scan and advances the last-pull-time watermark.",
           "isActive": true,
           "debug": false,
           "singleRecordExecution": false,
           "remoteExecutableFlag": 0,
-          "parameters": [
-            "username",
-            "max_scans",
-            "include_findings"
-          ],
+          "parameters": [],
           "synchronous": false,
-          "lastModifyDate": 1793910525,
+          "lastModifyDate": 1793927061,
           "collection": "/api/3/workflow_collections/fc74c089-bd0f-5400-90a8-637092179714",
           "versions": [],
-          "triggerStep": "/api/3/workflow_steps/f1c181a9-18ca-593d-b122-ab7c710c0bb9",
+          "triggerStep": "/api/3/workflow_steps/7552a27b-66b6-52d3-b1a5-487e706cbd91",
           "steps": [
             {
               "@type": "WorkflowStep",
               "name": "Start",
               "description": null,
               "arguments": {
-                "inputVariables": [
-                  {
-                    "name": "username"
-                  },
-                  {
-                    "name": "max_scans"
-                  },
-                  {
-                    "name": "include_findings"
-                  }
-                ],
-                "title": "FortiDAST > Ingest",
+                "title": "Fortinet FortiDAST > Ingest",
                 "resources": [
                   "alerts"
                 ],
-                "route": "bc26875c-20b8-5b3d-a667-51acf008fba2",
+                "route": "23d7b1f4-3b25-59dd-b8be-e95c1c1669fb",
+                "inputVariables": [],
                 "step_variables": {
                   "input": {
-                    "params": {
-                      "username": "{{vars.request.data[\"username\"]}}",
-                      "max_scans": "{{vars.request.data[\"max_scans\"]}}",
-                      "include_findings": "{{vars.request.data[\"include_findings\"]}}"
-                    },
+                    "params": [],
                     "records": "{{vars.input.records}}"
                   }
                 },
@@ -294,29 +724,24 @@
               "left": "200",
               "stepType": "/api/3/workflow_step_types/f414d039-bb0d-4e59-9c39-a8f1e880b18a",
               "group": null,
-              "uuid": "f1c181a9-18ca-593d-b122-ab7c710c0bb9"
+              "uuid": "7552a27b-66b6-52d3-b1a5-487e706cbd91"
             },
             {
               "@type": "WorkflowStep",
-              "name": "List Completed Scans",
+              "name": "Fetch Records",
               "description": null,
               "arguments": {
                 "apply_async": false,
                 "pass_parent_env": false,
                 "pass_input_record": false,
-                "arguments": {
-                  "username": "{{ vars.input.params.username | default('admin') }}",
-                  "max_scans": "{{ vars.input.params.max_scans | default(100) }}",
-                  "include_findings": "{{ vars.input.params.include_findings | default('true') }}"
-                },
-                "workflowReference": "/api/3/workflows/a687d779-f51b-5aa1-bd96-bb828a9e37ed"
+                "workflowReference": "/api/3/workflows/dec20f52-4e0f-5ff9-945d-b122c6fe8106"
               },
               "status": null,
               "top": "250",
               "left": "200",
               "stepType": "/api/3/workflow_step_types/74932bdc-b8b6-4d24-88c4-1a4dfbc524f3",
               "group": null,
-              "uuid": "7c7c9a12-5850-5275-aff7-f12eef74f0d2"
+              "uuid": "24a7ca92-2305-57c5-8df9-556d3cbf55e2"
             },
             {
               "@type": "WorkflowStep",
@@ -327,13 +752,13 @@
                   {
                     "option": "Mapping Preview",
                     "condition": "{{ vars.request.env_setup | default(false) | bool }}",
-                    "step_iri": "/api/3/workflow_steps/2db60de8-9394-5f7d-852f-14c41d6c97ad",
+                    "step_iri": "/api/3/workflow_steps/fa629b68-ccc8-5609-a90b-502c3a2a84dd",
                     "step_name": "Return Sample"
                   },
                   {
                     "option": "Ingest",
                     "default": true,
-                    "step_iri": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
+                    "step_iri": "/api/3/workflow_steps/f200d604-8375-500f-ae66-d63eb4331d85",
                     "step_name": "Configuration"
                   }
                 ]
@@ -343,35 +768,37 @@
               "left": "200",
               "stepType": "/api/3/workflow_step_types/12254cf5-5db7-4b1a-8cb1-3af081924b28",
               "group": null,
-              "uuid": "3eb5cb01-ecfe-5c20-8407-bf39366bd16e"
+              "uuid": "89db582d-e97e-57d6-bfbb-80ab40a65ffc"
             },
             {
               "@type": "WorkflowStep",
               "name": "Return Sample",
               "description": null,
               "arguments": {
-                "sample": "{% if vars.steps.List_Completed_Scans.data | default([]) | length > 0 %}\n  {{ vars.steps.List_Completed_Scans.data[0] }}\n{% else %}\n  {{ { 'asset_name': 'http://example.com', 'uuid': 'e0000000-0000-4000-8000-000000000000', 'scan_owner': 'owner@example.com', 'scan_status': 'Scan Complete', 'scan_started_at': '2026-11-01T10:00:00.000000Z', 'scan_at': '2026-11-01T10:05:00.000000Z', 'detected_ts': 1793599500, 'threat_level': 42, 'result_count': 2, 'max_severity': 'High', 'summary_text': 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.', 'vulnhash_url': 'https://fortidast.forticloud.com/sso?scanresult/sample', 'findings': [ { 'vulnerabilitytype': 'A1 - Injection', 'severity': 'High', 'cvssscore': 9.8, 'cweid': 89, 'vulnerabilitydescription': 'SQL injection in the search parameter.', 'remediation': 'Use parameterized queries.' }, { 'vulnerabilitytype': 'A5 - Misconfiguration', 'severity': 'Low', 'cvssscore': 3.1, 'cweid': 16, 'vulnerabilitydescription': 'Directory listing enabled.', 'remediation': 'Disable directory listing.' } ] } }}\n{% endif %}"
+                "sample": "{% if vars.steps.Fetch_Records.data | default([]) | length > 0 %}\n  {{ vars.steps.Fetch_Records.data[0] }}\n{% else %}\n  {{ { 'asset_name': 'http://example.com', 'uuid': 'e0000000-0000-4000-8000-000000000000', 'scan_owner': 'owner@example.com', 'scan_status': 'Scan Complete', 'scan_started_at': '2026-11-01T10:00:00.000000Z', 'scan_at': '2026-11-01T10:05:00.000000Z', 'detected_ts': 1793599500, 'threat_level': 42, 'result_count': 2, 'max_severity': 'High', 'summary_text': 'FortiDAST scan of http://example.com completed. Findings by severity: High: 1, Low: 1.', 'vulnhash_url': 'https://fortidast.forticloud.com/sso?scanresult/sample', 'findings': [ { 'vulnerabilitytype': 'A1 - Injection', 'severity': 'High', 'cvssscore': 9.8, 'cweid': 89, 'vulnerabilitydescription': 'SQL injection in the search parameter.', 'remediation': 'Use parameterized queries.' }, { 'vulnerabilitytype': 'A5 - Misconfiguration', 'severity': 'Low', 'cvssscore': 3.1, 'cweid': 16, 'vulnerabilitydescription': 'Directory listing enabled.', 'remediation': 'Disable directory listing.' } ] } }}\n{% endif %}"
               },
               "status": null,
               "top": "510",
               "left": "200",
               "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
               "group": null,
-              "uuid": "2db60de8-9394-5f7d-852f-14c41d6c97ad"
+              "uuid": "fa629b68-ccc8-5609-a90b-502c3a2a84dd"
             },
             {
               "@type": "WorkflowStep",
               "name": "Configuration",
               "description": null,
               "arguments": {
-                "incident_source_data": "{{ vars.steps.List_Completed_Scans.data }}"
+                "incident_source_data": "{{ vars.steps.Fetch_Records.data }}",
+                "FortinetFortiDASTMacroName": "{{ vars.steps.Fetch_Records.FortinetFortiDASTMacroName }}",
+                "severity_map": "{'critical': {{ 'Severity' | picklist('Critical') }}, 'high': {{ 'Severity' | picklist('High') }}, 'medium': {{ 'Severity' | picklist('Medium') }}, 'low': {{ 'Severity' | picklist('Low') }}, 'informational': {{ 'Severity' | picklist('Informational') }}}"
               },
               "status": null,
               "top": "510",
               "left": "540",
               "stepType": "/api/3/workflow_step_types/04d0cf46-b6a8-42c4-8683-60a7eaa69e8f",
               "group": null,
-              "uuid": "3c147c87-30e1-522f-af25-06daef7d6f10"
+              "uuid": "f200d604-8375-500f-ae66-d63eb4331d85"
             },
             {
               "@type": "WorkflowStep",
@@ -382,19 +809,21 @@
                 "resource": {
                   "name": "FortiDAST scan findings for {{ vars.item.asset_name }}",
                   "source": "Fortinet FortiDAST",
-                  "sourceId": "{{ vars.item.uuid }}",
-                  "severity": "{{ \"Severity\" | picklist(vars.item.max_severity | default(\"Informational\")) }}",
+                  "sourceId": "{{ vars.item.uuid | string }}",
+                  "severity": "{{ ((vars.item.max_severity) | default('') | string | lower | resolveRange(vars.severity_map)) or ('Severity' | picklist('Informational')) }}",
                   "alertDetectionDate": "{{ vars.item.detected_ts }}",
                   "description": "{{ vars.item.summary_text | e }}{% if vars.item.vulnhash_url %}<br><br>Scan results: <a href=\"{{ vars.item.vulnhash_url | e }}\">Open in FortiDAST</a>{% endif %}",
                   "sourcedata": "{{ vars.item | toJSON }}",
-                  "__replace": "true"
+                  "state": "{{ \"AlertState\" | picklist(\"New\") }}",
+                  "status": "{{ \"AlertStatus\" | picklist(\"Open\") }}",
+                  "__replace": "true",
+                  "__fieldsToUpdate": "{{ ['name', 'source', 'sourceId', 'severity', 'description', 'alertDetectionDate', 'sourcedata'] }}"
                 },
                 "collection": "/api/3/upsert/alerts",
                 "for_each": {
                   "item": "{{ vars.incident_source_data }}",
-                  "condition": "",
-                  "__bulk": true,
-                  "batch_size": 100
+                  "parallel": false,
+                  "condition": ""
                 }
               },
               "status": null,
@@ -402,59 +831,94 @@
               "left": "540",
               "stepType": "/api/3/workflow_step_types/2597053c-e718-44b4-8394-4d40fe26d357",
               "group": null,
-              "uuid": "e111ffe1-ef14-56dc-a14e-80928bb8e332"
+              "uuid": "7f563c46-bab5-5b05-bbd0-8dc2c04d3193"
+            },
+            {
+              "@type": "WorkflowStep",
+              "name": "Update Last Pull Time",
+              "description": null,
+              "arguments": {
+                "connector": "cyops_utilities",
+                "operation": "updatemacro",
+                "config": "",
+                "operationTitle": "FSR: Update Global Variables",
+                "params": {
+                  "macro": "{{vars.FortinetFortiDASTMacroName}}",
+                  "value": "{{vars.steps.Fetch_Records.current_time}}"
+                },
+                "version": "3.7.2",
+                "name": "Utilities",
+                "step_variables": [],
+                "pickFromTenant": false
+              },
+              "status": null,
+              "top": "770",
+              "left": "540",
+              "stepType": "/api/3/workflow_step_types/0bfed618-0316-11e7-93ae-92361f002671",
+              "group": null,
+              "uuid": "25997601-0763-5774-92c0-9362c01cc368"
             }
           ],
           "routes": [
             {
               "@type": "WorkflowRoute",
-              "name": "Start -> List Completed Scans",
-              "targetStep": "/api/3/workflow_steps/7c7c9a12-5850-5275-aff7-f12eef74f0d2",
-              "sourceStep": "/api/3/workflow_steps/f1c181a9-18ca-593d-b122-ab7c710c0bb9",
+              "name": "Start -> Fetch Records",
+              "targetStep": "/api/3/workflow_steps/24a7ca92-2305-57c5-8df9-556d3cbf55e2",
+              "sourceStep": "/api/3/workflow_steps/7552a27b-66b6-52d3-b1a5-487e706cbd91",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "ccecc24a-acfd-5e85-a2d7-b15f69cd119b"
+              "uuid": "0ef085d0-3567-5109-9522-fe233854bca5"
             },
             {
               "@type": "WorkflowRoute",
-              "name": "List Completed Scans -> Mapping Preview",
-              "targetStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
-              "sourceStep": "/api/3/workflow_steps/7c7c9a12-5850-5275-aff7-f12eef74f0d2",
+              "name": "Fetch Records -> Mapping Preview",
+              "targetStep": "/api/3/workflow_steps/89db582d-e97e-57d6-bfbb-80ab40a65ffc",
+              "sourceStep": "/api/3/workflow_steps/24a7ca92-2305-57c5-8df9-556d3cbf55e2",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "674fb259-48ec-569a-a94f-6f3ddb648f85"
+              "uuid": "7b4fcbe0-3ffb-5ba7-8b8d-1c18e123e5a8"
             },
             {
               "@type": "WorkflowRoute",
               "name": "Mapping Preview -> Return Sample",
-              "targetStep": "/api/3/workflow_steps/2db60de8-9394-5f7d-852f-14c41d6c97ad",
-              "sourceStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
+              "targetStep": "/api/3/workflow_steps/fa629b68-ccc8-5609-a90b-502c3a2a84dd",
+              "sourceStep": "/api/3/workflow_steps/89db582d-e97e-57d6-bfbb-80ab40a65ffc",
               "label": "Mapping Preview",
               "isExecuted": false,
               "group": null,
-              "uuid": "025ff060-0d6e-5d46-96c3-5c6356d69295"
+              "uuid": "df707374-f9af-5218-8d10-96f8aadd63cc"
             },
             {
               "@type": "WorkflowRoute",
               "name": "Mapping Preview -> Configuration",
-              "targetStep": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
-              "sourceStep": "/api/3/workflow_steps/3eb5cb01-ecfe-5c20-8407-bf39366bd16e",
+              "targetStep": "/api/3/workflow_steps/f200d604-8375-500f-ae66-d63eb4331d85",
+              "sourceStep": "/api/3/workflow_steps/89db582d-e97e-57d6-bfbb-80ab40a65ffc",
               "label": "Ingest",
               "isExecuted": false,
               "group": null,
-              "uuid": "9c29858f-34af-5c60-9994-b699a0c6c9f3"
+              "uuid": "62325eb6-ca90-5329-98eb-68207963b446"
             },
             {
               "@type": "WorkflowRoute",
               "name": "Configuration -> Create Record",
-              "targetStep": "/api/3/workflow_steps/e111ffe1-ef14-56dc-a14e-80928bb8e332",
-              "sourceStep": "/api/3/workflow_steps/3c147c87-30e1-522f-af25-06daef7d6f10",
+              "targetStep": "/api/3/workflow_steps/7f563c46-bab5-5b05-bbd0-8dc2c04d3193",
+              "sourceStep": "/api/3/workflow_steps/f200d604-8375-500f-ae66-d63eb4331d85",
               "label": null,
               "isExecuted": false,
               "group": null,
-              "uuid": "822b171c-708b-5a6a-aa59-696aec6f763e"
+              "uuid": "4612a9b5-1a8c-58d0-bf83-779b53eb4e61"
+            },
+            {
+              "@type": "WorkflowRoute",
+              "name": "Create Record -> Update Last Pull Time",
+              "targetStep": "/api/3/workflow_steps/25997601-0763-5774-92c0-9362c01cc368",
+              "sourceStep": "/api/3/workflow_steps/7f563c46-bab5-5b05-bbd0-8dc2c04d3193",
+              "label": null,
+              "isExecuted": false,
+              "group": null,
+              "uuid": "cb1bf4bf-0076-52eb-a2a8-9d57da4c2485"
             }
           ],
           "groups": [
@@ -472,7 +936,7 @@
               "left": "880",
               "height": "226",
               "width": "440",
-              "uuid": "9552d5fe-1940-55e1-b407-2b102288ac5d",
+              "uuid": "4bcd462c-3d66-5e6b-8861-37941f25b7a8",
               "recordTags": []
             },
             {
@@ -489,13 +953,13 @@
               "left": "880",
               "height": "204",
               "width": "440",
-              "uuid": "1df36d54-153d-57e9-960e-0f1faa38672f",
+              "uuid": "06224a50-3984-500e-8573-62a7836c085a",
               "recordTags": []
             },
             {
               "@type": "WorkflowGroup",
               "name": "Note: Configuration",
-              "description": "The values the alerts take from the connector's output: the run's\ncompleted scans. Severity comes from the per-scan rollup; a scan with\nno findings ingests as Informational.\n",
+              "description": "The values the alerts take from the connector's output: the run's\ncompleted scans, the macro holding the watermark, and the vendor ->\npicklist mappings Create Record reads with resolveRange. Edit the\nmappings here.\n",
               "type": "note",
               "isCollapsed": false,
               "hasTriggerStep": false,
@@ -504,33 +968,50 @@
               "reusable": false,
               "top": "850",
               "left": "880",
-              "height": "160",
+              "height": "204",
               "width": "440",
-              "uuid": "e32c6d41-9df0-5536-895b-004e37a981f0",
+              "uuid": "50445113-6695-5f10-af88-d812b5cb92e2",
               "recordTags": []
             },
             {
               "@type": "WorkflowGroup",
               "name": "Note: Create Record",
-              "description": "The step is named \"Create Record\" because the Data Ingestion Wizard's\nData Mapping page is shown only for a create playbook with a step of\nexactly that name, and it reads the target module off this step.\n\nis_upsert routes this at /api/3/upsert/alerts, keyed on sourceId (the\nasset uuid), so a re-run refreshes the asset's alert instead of\nduplicating it, and a rescan updates the same alert with the newest\nfindings.\n\nOnly the alert fields below are set. The raw scan row plus its\nfindings are kept as JSON in sourcedata (sourcedata must stay\n`| toJSON`: a bare {{ }} on a dict is stored as the literal string\n\"Array\").\n",
+              "description": "The step is named \"Create Record\" because the Data Ingestion Wizard's\nData Mapping page is shown only for a create playbook with a step of\nexactly that name, and it reads the target module off this step.\n\nis_upsert routes this at /api/3/upsert/alerts, keyed on sourceId (the\nasset uuid), so a re-read window refreshes the asset's alert instead\nof duplicating it. __fieldsToUpdate leaves the create-only fields\n(state/status) alone on an update, so a re-read never resets triage.\n\nOnly the alert fields below are set. The raw scan row plus its\nfindings are kept as JSON in sourcedata (sourcedata must stay\n`| toJSON`: a bare {{ }} on a dict is stored as the literal string\n\"Array\").\n",
               "type": "note",
               "isCollapsed": false,
               "hasTriggerStep": false,
               "hideInLogs": true,
               "metadata": [],
               "reusable": false,
-              "top": "1030",
+              "top": "1074",
               "left": "880",
               "height": "360",
               "width": "440",
-              "uuid": "a159108c-c218-5975-8a63-516c38f4459b",
+              "uuid": "3308a6a4-0626-5460-806e-9e3596908a74",
+              "recordTags": []
+            },
+            {
+              "@type": "WorkflowGroup",
+              "name": "Note: Update Last Pull Time",
+              "description": "Advance the watermark LAST, only after the records are written: a\nfailed create must leave the window open for the next run.\n",
+              "type": "note",
+              "isCollapsed": false,
+              "hasTriggerStep": false,
+              "hideInLogs": true,
+              "metadata": [],
+              "reusable": false,
+              "top": "1454",
+              "left": "880",
+              "height": "138",
+              "width": "440",
+              "uuid": "19efa2c1-f755-5dfc-b901-ec683cdc0f84",
               "recordTags": []
             }
           ],
           "priority": "/api/3/picklists/9e8d41e4-8ada-4a2c-bd02-07f62c6d0a00",
           "playbookOrigin": null,
           "isEditable": true,
-          "uuid": "9fadc6cd-1c78-5d01-b73d-acb86ea2307c",
+          "uuid": "4bf12de3-90dc-5826-b788-f97a811af521",
           "owners": [],
           "isPrivate": false
         }
