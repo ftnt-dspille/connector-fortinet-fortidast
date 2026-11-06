@@ -130,6 +130,10 @@ requires `FORTIDAST_ALLOW_MUTATE=true` in `tests/.env`. `FORTIDAST_USER` names
 the FortiDAST user whose assets the tests enumerate (admin/administrator are
 tried when unset).
 
+See `tests/COVERAGE.md` for what the live suite does and does not verify
+(and `tests/probe_undocumented_params.py` for the read-only API-parameter
+probe behind it).
+
 The API surface is typed end to end: `lib/fortidast/models.py` holds the
 pydantic request/response models (validated against the FNDN OpenAPI spec's
 shapes, lenient about the API's documented sloppiness -- nulls, lowercase
